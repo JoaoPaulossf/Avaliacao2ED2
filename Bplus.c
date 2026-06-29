@@ -24,7 +24,29 @@ FILE* inicializar_arquivo(char* nome_arquivo){
 
     return arquivo;
 }
-ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_dado)(), int (*comp_chaves)(void*, void*));
+ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_dado)(), int (*comp_chaves)(void*, void*)){
+    ArvoreBPlus *arvore = malloc(sizeof(ArvoreBPlus));
+    arvore->arquivo_binario = inicializar_arquivo(nome_arquivo); //Abre e inicializa o arquivo criando o cabeçalho;
+
+    cabecalhoArvore cabecalho;
+    fseek(arvore->arquivo_binario, 0, SEEK_SET);
+    fread(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
+    if (fread(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario) != 1) {
+        arvore->raiz_offset = -1;
+    } else {
+        arvore->raiz_offset = cabecalho.raiz_offset;
+    }
+    
+    arvore->raiz_offset = cabecalho.raiz_offset;
+
+    //Calculo responsável por detrminar a ordem da ávore baseado no tamanho de pagina e de suas variáveis
+    int espaco_cabecalho = sizeof(int) * 2 + sizeof(long int);
+    int espaco_livre = PAGE_SIZE - espaco_cabecalho;
+    arvore->ordem_interna = espaco_livre / (size_chave() + sizeof(long int));
+    arvore->ordem_folha = espaco_livre / (size_chave() + size_dado());
+
+    return arvore;
+}
 
 void inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int(*comparar)(void*, void*));
 
