@@ -21,6 +21,8 @@ typedef struct{
     long int raiz_offset;
     int ordem_interna;
     int ordem_folha;
+    int size_chave;
+    int size_dado;
 }ArvoreBPlus;
 
 FILE* inicializar_arquivo(char* nome_arquivo);
@@ -29,7 +31,7 @@ ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_da
 
 void inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int(*comparar)(void*, void*));
 
-void buscar_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void*));
+int buscar_arvore(ArvoreBPlus *arvore, void *chave, void *dado_retorno, int (*comparar)(void*, void*));
 
 void ler_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, int size_dado);
 

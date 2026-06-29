@@ -48,9 +48,40 @@ ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_da
     return arvore;
 }
 
-void inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int(*comparar)(void*, void*));
+void inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int(*comparar)(void*, void*)){
 
-void buscar_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void*));
+}
+
+
+int buscar_arvore(ArvoreBPlus *arvore, void *chave, void *dado_retorno, int (*comparar)(void*, void*)) {
+    long int offset_atual = arvore->raiz_offset;
+    pagina *pagina_atual = malloc(sizeof(pagina));
+    
+    ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+    
+    while(pagina_atual->eh_folha == 0) {
+        int i = 0;
+        while (i < pagina_atual->num_chaves && comparar(chave, pagina_atual->chaves[i]) >= 0) {
+            i++;
+        }
+        offset_atual = pagina_atual->filhos[i];
+        ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+    }
+    
+    int i = 0;
+    while (i < pagina_atual->num_chaves && comparar(chave, pagina_atual->chaves[i]) > 0) {
+        i++;
+    }
+    
+    if (i < pagina_atual->num_chaves && comparar(chave, pagina_atual->chaves[i]) == 0) {
+        memcpy(dado_retorno, pagina_atual->dados[i], arvore->size_dado);
+        free(pagina_atual);
+        return 1;
+    }
+    
+    free(pagina_atual);
+    return 0;
+}
 
 void ler_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, int size_dado){
     char buffer[4096];
