@@ -58,7 +58,7 @@ int buscar_arvore(ArvoreBPlus *arvore, void *chave, void *dado_retorno, int (*co
     pagina *pagina_atual = malloc(sizeof(pagina));
     
     ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
-    
+    //Procuramos na estrutura da arvore e descemos até a folha em que esta presente a chave procurada
     while(pagina_atual->eh_folha == 0) {
         int i = 0;
         while (i < pagina_atual->num_chaves && comparar(chave, pagina_atual->chaves[i]) >= 0) {
@@ -67,7 +67,7 @@ int buscar_arvore(ArvoreBPlus *arvore, void *chave, void *dado_retorno, int (*co
         offset_atual = pagina_atual->filhos[i];
         ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
     }
-    
+    //Reiniciamos o contador e procuramos entre as chaves da página a chave procurada
     int i = 0;
     while (i < pagina_atual->num_chaves && comparar(chave, pagina_atual->chaves[i]) > 0) {
         i++;
