@@ -29,12 +29,14 @@ FILE* inicializar_arquivo(char* nome_arquivo);
 
 ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_dado)(), int (*comp_chaves)(void*, void*));
 
-void inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int(*comparar)(void*, void*));
+int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int(*comparar)(void*, void*));
 
 int buscar_arvore(ArvoreBPlus *arvore, void *chave, void *dado_retorno, int (*comparar)(void*, void*));
 
 void ler_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, int size_dado);
 
 void escrever_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, int size_dado);
+
+void split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia);
 
 #endif

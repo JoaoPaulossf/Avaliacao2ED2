@@ -48,8 +48,114 @@ ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_da
     return arvore;
 }
 
-void inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int(*comparar)(void*, void*)){
+long int buscar_offset_livre(ArvoreBPlus *arvore) {
+    long int offset_retorno;
+    cabecalhoArvore cabecalho;
+    
+    fseek(arvore->arquivo_binario, 0, SEEK_SET);
+    fread(&cabecalho, sizeof(cabecalho), 1, arvore->arquivo_binario);
+    
+    if (cabecalho.topo_lista_livre != -1) {
+        offset_retorno = cabecalho.topo_lista_livre;
+        
+        pagina *p = malloc(sizeof(pagina));
+        ler_pagina(arvore->arquivo_binario, offset_retorno, p, arvore->size_chave, arvore->size_dado);
+        
+        cabecalho.topo_lista_livre = p->proxima_folha; 
+        free(p);
+    } else {
+        fseek(arvore->arquivo_binario, 0, SEEK_END);
+        offset_retorno = ftell(arvore->arquivo_binario);
+    }
+    
+    fseek(arvore->arquivo_binario, 0, SEEK_SET);
+    fwrite(&cabecalho, sizeof(cabecalho), 1, arvore->arquivo_binario);
+    
+    return offset_retorno;
+}
 
+void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia) {
+    //Função responsável por criar uma nova folha quando a anterior esta cheia
+    pagina *nova_folha = malloc(sizeof(pagina));
+    nova_folha->eh_folha = 1;
+    
+    nova_folha->chaves = malloc(arvore->ordem_folha * sizeof(void*));
+    nova_folha->dados = malloc(arvore->ordem_folha * arvore->size_dado);
+    
+    //Com a nova folha criada, se passa metade dos dados da cheia para a nova;
+    int total_chaves = folha_cheia->num_chaves;
+    int metade = total_chaves / 2;
+    int j = 0;
+
+    for (int i = metade; i < total_chaves; i++) {
+        nova_folha->chaves[j] = malloc(arvore->size_chave);
+        memcpy(nova_folha->chaves[j], folha_cheia->chaves[i], arvore->size_chave);
+        
+        memcpy(&nova_folha->dados[j * arvore->size_dado], &folha_cheia->dados[i * arvore->size_dado], arvore->size_dado);
+        j++;
+        free(folha_cheia->chaves[i]); 
+        folha_cheia->chaves[i] = NULL;
+    }
+
+    nova_folha->num_chaves = j;
+    folha_cheia->num_chaves = metade; 
+
+    nova_folha->proxima_folha = folha_cheia->proxima_folha;
+    folha_cheia->proxima_folha = buscar_offset_livre(arvore); 
+
+    escrever_pagina(arvore->arquivo_binario, offset_cheia, folha_cheia, arvore->size_chave, arvore->size_dado);
+    escrever_pagina(arvore->arquivo_binario, folha_cheia->proxima_folha, nova_folha, arvore->size_chave, arvore->size_dado);
+    
+    free(nova_folha); 
+}
+
+int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int(*comparar)(void*, void*)){
+    long int offset_atual = arvore->raiz_offset;
+    
+    long int caminho_pais[10]; 
+    int nivel_atual = 0;
+
+    pagina *pagina_atual = malloc(sizeof(pagina));
+    ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+    
+    while (pagina_atual->eh_folha == 0) {
+        caminho_pais[nivel_atual] = offset_atual;
+        nivel_atual++;
+
+        int i = 0;
+        while (i < pagina_atual->num_chaves && comparar(chave, pagina_atual->chaves[i]) >= 0) {
+            i++;
+        }
+        offset_atual = pagina_atual->filhos[i];
+        ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+    }
+
+    //Procura a posição dentro da pagina em que se deve inserir a chave e desloca o resto para encaixar.
+    if(pagina_atual->num_chaves < arvore->ordem_folha -1){
+        int i = 0;
+        while (i < pagina_atual->num_chaves && comparar(chave, pagina_atual->chaves[i]) > 0) {
+            i++;
+        }
+        memmove(&pagina_atual->chaves[i + 1], &pagina_atual->chaves[i], (pagina_atual->num_chaves - i) * sizeof(void*));
+        memmove(&pagina_atual->dados[i + 1], &pagina_atual->dados[i], (pagina_atual->num_chaves - i) * arvore->size_dado);
+
+        pagina_atual->chaves[i] = chave;
+        pagina_atual->dados[i] = dado;
+        pagina_atual->num_chaves++;
+
+        escrever_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+        free(pagina_atual);
+        return 0;
+    } else {
+        void *chave_promovida = split_folha(arvore, pagina_atual, offset_atual);
+        
+        long int offset_nova_folha = pagina_atual->proxima_folha; 
+        
+        propagar_insercao_pai(arvore, chave_promovida, offset_nova_folha, caminho_pais, nivel_atual);
+
+        free(pagina_atual);
+        return 1;
+    }
 }
 
 
@@ -96,14 +202,18 @@ void ler_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, 
     memcpy(&(pagina->num_chaves), buffer + posicao_atual, sizeof(int));
     posicao_atual += sizeof(int);
 
-    for (int i = 0; i < pagina->num_chaves; i++) {
-        pagina->chaves[i] = malloc(size_chave); 
-        memcpy(pagina->chaves[i], buffer + posicao_atual, size_chave);
-        posicao_atual += size_chave;
-    }
-    for (int i = 0; i < pagina->num_chaves; i++) {
-        memcpy(&(pagina->filhos[i]), buffer + posicao_atual, sizeof(long int));
-        posicao_atual += sizeof(long int);
+    if (pagina->eh_folha == 0) {
+        for (int i = 0; i <= pagina->num_chaves; i++) { // B+ tem num_chaves + 1 filhos [cite: 217]
+            memcpy(&(pagina->filhos[i]), buffer + posicao_atual, sizeof(long int));
+            posicao_atual += sizeof(long int);
+        }
+    } else {
+        for (int i = 0; i < pagina->num_chaves; i++) {
+            pagina->dados[i] = malloc(size_dado);
+            memcpy(pagina->dados[i], buffer + posicao_atual, size_dado);
+            posicao_atual += size_dado;
+        }
+        memcpy(&(pagina->proxima_folha), buffer + posicao_atual, sizeof(long int));
     }
 }
 
