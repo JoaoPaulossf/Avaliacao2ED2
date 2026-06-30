@@ -9,9 +9,9 @@
 typedef struct{
     int eh_folha;
     int num_chaves;
-    void **chaves;
+    void *chaves;
     long int *filhos;
-    void **dados;
+    void *dados;
     long int proxima_folha;
 }pagina;
 
@@ -23,6 +23,7 @@ typedef struct{
     int ordem_folha;
     int size_chave;
     int size_dado;
+    int altura;
 }ArvoreBPlus;
 
 FILE* inicializar_arquivo(char* nome_arquivo);
