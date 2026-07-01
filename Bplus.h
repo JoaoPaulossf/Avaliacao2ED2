@@ -61,7 +61,7 @@ void concatenar_folhas(ArvoreBPlus *arvore, pagina *folha_esq, long int offset_e
 void underflow_folha(ArvoreBPlus *arvore, pagina *folha, long int offset_folha, long int *caminho_pais, int nivel_atual); //Função que trata o caso de underflow em folhas da arvore
 
 int remover_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void*)); //Função núcleo de remoção de chaves
-//3 Bloco de funções relacionadas a escrita e leitura de dados no disco;
+//3 - Bloco de funções relacionadas a escrita e leitura de dados no disco;
 void ler_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, int size_dado); //Função de leitura no disco
 
 void escrever_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, int size_dado); //Função de escrita no disco
