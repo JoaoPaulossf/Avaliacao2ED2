@@ -33,13 +33,13 @@ long int buscar_offset_livre(ArvoreBPlus *arvore); //Função de busca de offset
 void liberar_offset(ArvoreBPlus *arvore, long int offset_liberado); //Função de esvaziamento de offset
 
 //2 - Bloco de criação e manipulação da arvore B+
-ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_dado)(), int (*comp_chaves)(void*, void*)); //Função de criação da arvore
+ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_dado)()); //Função de criação da arvore
 
 //2.1 Bloco de funções relacionadas a inserção de chaves
 
 void inserir_simples(ArvoreBPlus *arvore, void *chave, void *dado, pagina* pagina_atual, int posicao); //Função auxiliar de inserção simples na arvore
 
-void split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia); //Função de cisão de folhas da arvore, ativada no caso de overflow
+void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia); //Função de cisão de folhas da arvore, ativada no caso de overflow
 
 void* split_interno(ArvoreBPlus *arvore, pagina *pai_cheio, long int offset_cheio, void *chave_inserir, long int offset_filho_direito, long int *offset_novo_pai, int (*comparar)(void*, void*)); //Função de cisão interna da arvore, ativada em caso de overflow de paginas internas
 
@@ -49,6 +49,8 @@ int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int (*comparar)
 
 //2.2 Função relacionada a busca de chaves dentro da arvore
 int buscar_arvore(ArvoreBPlus *arvore, void *chave, void *dado_retorno, int (*comparar)(void*, void*));
+void* buscar_multiplos(ArvoreBPlus *arvore, void *chave_parcial, int *qtd_retornos, int (*comparar_parcial)(void*, void*));
+void* buscar_intervalo(ArvoreBPlus *arvore, void *chave_inicio, void *chave_fim, int *qtd_retornos, int (*comparar)(void*, void*));
 
 //2.3 Bloco de funções relacionadas a remoção de chaves
 
@@ -65,5 +67,9 @@ int remover_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void
 void ler_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, int size_dado); //Função de leitura no disco
 
 void escrever_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, int size_dado); //Função de escrita no disco
+
+void exibir_arvore_recursivo(ArvoreBPlus *arvore, long int offset, int nivel, void (*imprimir_chave)(void*));
+
+void exibir_arvore(ArvoreBPlus *arvore, void (*imprimir_chave)(void*));
 
 #endif

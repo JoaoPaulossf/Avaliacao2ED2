@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include <Bplus.h>
+#include "Bplus.h"
 
 //Estrutura interna para gravar no início do ficheiro;
 typedef struct{
@@ -29,33 +30,29 @@ void liberar_offset(ArvoreBPlus *arvore, long int offset_liberado) {
 }
 
 long int buscar_offset_livre(ArvoreBPlus *arvore) {
-    //Funcao responsável por buscar um offset livre durante a criação de uma nova pagina
-    long int offset_retorno;
     cabecalhoArvore cabecalho;
-    
-    //Lê o cabeçalho atual para descobrir quem é o topo da lista livre
     fseek(arvore->arquivo_binario, 0, SEEK_SET);
-    fread(&cabecalho, sizeof(cabecalho), 1, arvore->arquivo_binario);
-    
+    fread(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
+
     if (cabecalho.topo_lista_livre != -1) {
-        //No caso de nao ter um livre se aloca um novo
-        offset_retorno = cabecalho.topo_lista_livre;
+        long int offset_reaproveitado = cabecalho.topo_lista_livre;
         
-        pagina *p = malloc(sizeof(pagina));
-        ler_pagina(arvore->arquivo_binario, offset_retorno, p, arvore->size_chave, arvore->size_dado);
+        // Descobre qual era o próximo offset livre que estava salvo dentro dessa página apagada
+        long int proximo_livre;
+        fseek(arvore->arquivo_binario, offset_reaproveitado, SEEK_SET);
+        fread(&proximo_livre, sizeof(long int), 1, arvore->arquivo_binario);
+
+        // Atualiza o topo da lista no cabeçalho
+        cabecalho.topo_lista_livre = proximo_livre;
+        fseek(arvore->arquivo_binario, 0, SEEK_SET);
+        fwrite(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
         
-        cabecalho.topo_lista_livre = p->proxima_folha; 
-        free(p);
+        return offset_reaproveitado;
     } else {
-        //No caso de ter, determina quem é
+        // Se a lista de blocos livres estiver vazia, crescemos o arquivo pelo final!
         fseek(arvore->arquivo_binario, 0, SEEK_END);
-        offset_retorno = ftell(arvore->arquivo_binario);
+        return ftell(arvore->arquivo_binario);
     }
-    //Atualiza o cabeçalho e retorna
-    fseek(arvore->arquivo_binario, 0, SEEK_SET);
-    fwrite(&cabecalho, sizeof(cabecalho), 1, arvore->arquivo_binario);
-    
-    return offset_retorno;
 }
 
 FILE* inicializar_arquivo(char* nome_arquivo){
@@ -74,27 +71,31 @@ FILE* inicializar_arquivo(char* nome_arquivo){
 
     return arquivo;
 }
-ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_dado)(), int (*comp_chaves)(void*, void*)){
+ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_dado)()) {
     ArvoreBPlus *arvore = malloc(sizeof(ArvoreBPlus));
-    arvore->arquivo_binario = inicializar_arquivo(nome_arquivo); //Abre e inicializa o arquivo criando o cabeçalho;
+    arvore->arquivo_binario = inicializar_arquivo(nome_arquivo);
 
+    // 1. GRAVAR OS TAMANHOS (Garante que o disco saiba quantos bytes o memcpy deve copiar)
+    arvore->size_chave = size_chave();
+    arvore->size_dado = size_dado();
+
+    // 2. CÁLCULO MATEMÁTICO DA ORDEM (Baseado na Página de 4096 bytes)
+    // Descontamos a "casca" da struct folha: eh_folha(4) + num_chaves(4) + proxima_folha(8) = 16 bytes.
+    int espaco_util = PAGE_SIZE - 16; 
+    
+    // Folhas guardam a dupla [Chave + Dado]
+    arvore->ordem_folha = espaco_util / (arvore->size_chave + arvore->size_dado);
+    
+    // Internos guardam a dupla [Chave + Offset do Filho(8 bytes)]
+    arvore->ordem_interna = espaco_util / (arvore->size_chave + sizeof(long int));
+
+    // 3. LER O CABEÇALHO PARA A RAM (Garante que a raiz_offset não inicie com lixo de memória)
     cabecalhoArvore cabecalho;
     fseek(arvore->arquivo_binario, 0, SEEK_SET);
     fread(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
-    if (fread(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario) != 1) {
-        arvore->raiz_offset = -1;
-    } else {
-        arvore->raiz_offset = cabecalho.raiz_offset;
-    }
     
     arvore->raiz_offset = cabecalho.raiz_offset;
     arvore->altura = cabecalho.altura;
-
-    //Calculo responsável por detrminar a ordem da ávore baseado no tamanho de pagina e de suas variáveis
-    int espaco_cabecalho = sizeof(int) * 2 + sizeof(long int);
-    int espaco_livre = PAGE_SIZE - espaco_cabecalho;
-    arvore->ordem_interna = espaco_livre / (size_chave() + sizeof(long int));
-    arvore->ordem_folha = espaco_livre / (size_chave() + size_dado());
 
     return arvore;
 }
@@ -243,7 +244,7 @@ void propagar_insercao_pai(ArvoreBPlus *arvore, void *chave_promovida, long int 
         memcpy(nova_raiz->chaves, chave_promovida, arvore->size_chave);
 
         //Conecta os ponteiros (filho esquerdo e filho direito)
-        nova_raiz->filhos = arvore->raiz_offset; 
+        *nova_raiz->filhos = arvore->raiz_offset;
         nova_raiz->filhos[5] = offset_filho_direito; 
 
         //Escreve-se no disco as alterações;
@@ -330,8 +331,7 @@ int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int (*comparar)
     long int *caminho_pais = malloc((arvore->altura + 1) * sizeof(long int)); //Será usado na propagação
     int nivel_atual = 0;
     long int offset_atual = arvore->raiz_offset;
-
-    if (offset_atual == -1) { //No caso da arvore estar vazia, realizamos a primeira inserção;
+    if (arvore->raiz_offset == -1) {
         pagina *nova_raiz = malloc(sizeof(pagina));
         nova_raiz->eh_folha = 1;
         nova_raiz->num_chaves = 1;
@@ -340,27 +340,32 @@ int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int (*comparar)
         nova_raiz->chaves = malloc(arvore->ordem_folha * arvore->size_chave);
         nova_raiz->dados = malloc(arvore->ordem_folha * arvore->size_dado);
 
-        // Copia a primeira chave e o primeiro dado para o início dos blocos (índice 0)
+        // Copia a primeira chave e o primeiro dado para a nova raiz
         memcpy(nova_raiz->chaves, chave, arvore->size_chave);
         memcpy(nova_raiz->dados, dado, arvore->size_dado);
 
-        // Obtém um novo endereço no arquivo para gravar esta página
+        // Pega um offset livre e grava a página no disco
         long int novo_offset = buscar_offset_livre(arvore);
-        arvore->raiz_offset = novo_offset; 
-        arvore->altura = 1;
-        //Escreve-se no disco as alterações;
         escrever_pagina(arvore->arquivo_binario, novo_offset, nova_raiz, arvore->size_chave, arvore->size_dado);
 
-        cabecalhoArvore cabecalho_atualizado;
-        cabecalho_atualizado.raiz_offset = arvore->raiz_offset;
-        cabecalho_atualizado.topo_lista_livre = -1; 
-        cabecalho_atualizado.altura = arvore->altura;
+        // Atualiza a estrutura na RAM
+        arvore->raiz_offset = novo_offset;
+        arvore->altura = 1;
 
+        // Atualiza o CABEÇALHO no disco para a árvore nunca mais ser -1
+        cabecalhoArvore cabecalho;
         fseek(arvore->arquivo_binario, 0, SEEK_SET);
-        fwrite(&cabecalho_atualizado, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
+        fread(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
+        cabecalho.raiz_offset = arvore->raiz_offset;
+        cabecalho.altura = arvore->altura;
+        fseek(arvore->arquivo_binario, 0, SEEK_SET);
+        fwrite(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
 
-        free(nova_raiz->chaves); free(nova_raiz->dados); free(nova_raiz);
-        return 0; 
+        free(nova_raiz->chaves);
+        free(nova_raiz->dados);
+        free(nova_raiz);
+        
+        return 1; // Inserido com sucesso na nova raiz
     }
 
     pagina *pagina_atual = malloc(sizeof(pagina));
@@ -418,44 +423,44 @@ int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int (*comparar)
 }
 
 
-int buscar_arvore(ArvoreBPlus *arvore, void *chave, void *dado_retorno, int (*comparar)(void*, void*)) {
-    //Função responsável por descer a arvore buscando o dado da chave procurada;
-    long int offset_atual = arvore->raiz_offset;
-    if (offset_atual == -1) return 0;
+int buscar_arvore(ArvoreBPlus *arvore, void *chave, void  *dado_retorno, int (*comparar)(void*, void*)) {
+    //Função responsável pela busca de chaves na arvore
+    if (arvore->raiz_offset == -1) return 0; // Árvore vazia
 
+    long int offset_atual = arvore->raiz_offset;
     pagina *pagina_atual = malloc(sizeof(pagina));
-    
-    // Desce até a folha
-    while(1) {
-        ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
-        
-        if (pagina_atual->eh_folha == 1) break; 
+    ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+
+    //Laço de descida
+    while (pagina_atual->eh_folha == 0) {
         int i = 0;
         while (i < pagina_atual->num_chaves) {
             void *chave_i = (char *)pagina_atual->chaves + (i * arvore->size_chave);
-            if (comparar(chave, chave_i) < 0) {
-                break;
-            }
+            if (comparar(chave, chave_i) < 0) break;
             i++;
         }
         offset_atual = pagina_atual->filhos[i];
+
         
+        free(pagina_atual->chaves);
         free(pagina_atual->filhos);
+        ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
     }
 
-    int i = 0;
+    //Busca na folha
     int encontrado = 0;
+    int i = 0;
     while (i < pagina_atual->num_chaves) {
         void *chave_i = (char *)pagina_atual->chaves + (i * arvore->size_chave);
         int cmp = comparar(chave, chave_i);
-        
+
         if (cmp == 0) {
             void *dado_i = (char *)pagina_atual->dados + (i * arvore->size_dado);
             memcpy(dado_retorno, dado_i, arvore->size_dado);
             encontrado = 1;
             break;
         } else if (cmp < 0) {
-            break; 
+            break; // Passou do ponto, a chave não existe
         }
         i++;
     }
@@ -466,6 +471,161 @@ int buscar_arvore(ArvoreBPlus *arvore, void *chave, void *dado_retorno, int (*co
 
     return encontrado;
 }
+
+void* buscar_multiplos(ArvoreBPlus *arvore, void *chave_parcial, int *qtd_retornos, int (*comparar_parcial)(void*, void*)) {
+    *qtd_retornos = 0;
+    if (arvore->raiz_offset == -1) return NULL;
+
+    long int offset_atual = arvore->raiz_offset;
+    pagina *pagina_atual = malloc(sizeof(pagina));
+    ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+
+    while (pagina_atual->eh_folha == 0) {
+        int i = 0;
+        while (i < pagina_atual->num_chaves) {
+            void *chave_i = (char *)pagina_atual->chaves + (i * arvore->size_chave);
+            if (comparar_parcial(chave_parcial, chave_i) <= 0) break;
+            i++;
+        }
+        offset_atual = pagina_atual->filhos[i];
+
+        //Limpeza antes de ler a próxima página
+        free(pagina_atual->chaves);
+        free(pagina_atual->filhos);
+        ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+    }
+
+    int capacidade = 5;
+    void *resultados = malloc(capacidade * arvore->size_dado);
+    int continuar_busca = 1;
+
+    while (continuar_busca) {
+        for (int i = 0; i < pagina_atual->num_chaves; i++) {
+            void *chave_i = (char *)pagina_atual->chaves + (i * arvore->size_chave);
+            int cmp = comparar_parcial(chave_parcial, chave_i);
+
+            if (cmp == 0) {
+                //Se o vetor encheu, dobra o tamanho (realloc)
+                if (*qtd_retornos >= capacidade) {
+                    capacidade *= 2;
+                    resultados = realloc(resultados, capacidade * arvore->size_dado);
+                }
+                
+                //Copia o dado genérico da folha para o nosso vetor de resultados
+                void *dado_i = (char *)pagina_atual->dados + (i * arvore->size_dado);
+                memcpy((char *)resultados + (*qtd_retornos * arvore->size_dado), dado_i, arvore->size_dado);
+                (*qtd_retornos)++;
+                
+            } else if (cmp < 0) {
+                //Como os dados estão ordenados, se a chave da árvore ficou maior que a buscada,
+                //significa que as correspondências terminaram.
+                continuar_busca = 0;
+                break;
+            }
+        }
+
+        //Pula para a página vizinha usando a lista encadeada de folhas
+        if (continuar_busca && pagina_atual->proxima_folha != -1) {
+            offset_atual = pagina_atual->proxima_folha;
+            free(pagina_atual->chaves);
+            free(pagina_atual->dados);
+            ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+        } else {
+            continuar_busca = 0;
+        }
+    }
+
+    free(pagina_atual->chaves);
+    if (pagina_atual->eh_folha) free(pagina_atual->dados);
+    else free(pagina_atual->filhos);
+    free(pagina_atual);
+
+    //Se nada foi encontrado, devolve NULL
+    if (*qtd_retornos == 0) {
+        free(resultados);
+        return NULL;
+    }
+
+    return resultados;
+}
+
+void* buscar_intervalo(ArvoreBPlus *arvore, void *chave_inicio, void *chave_fim, int *qtd_retornos, int (*comparar)(void*, void*)) {
+    //Função responsavel por buscar entre intervalos
+    *qtd_retornos = 0;
+    if (arvore->raiz_offset == -1) return NULL; //Árvore vazia
+
+    long int offset_atual = arvore->raiz_offset;
+    pagina *pagina_atual = malloc(sizeof(pagina));
+    ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+
+    //Desce até as folhas
+    while (pagina_atual->eh_folha == 0) {
+        int i = 0;
+        while (i < pagina_atual->num_chaves) {
+            void *chave_i = (char *)pagina_atual->chaves + (i * arvore->size_chave);
+            if (comparar(chave_inicio, chave_i) <= 0) break;
+            i++;
+        }
+        offset_atual = pagina_atual->filhos[i];
+
+        free(pagina_atual->chaves);
+        free(pagina_atual->filhos);
+        ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+    }
+
+    //Varredura pelas folhas
+    int capacidade = 5;
+    void *resultados = malloc(capacidade * arvore->size_dado);
+    int continuar_busca = 1;
+
+    while (continuar_busca) {
+        for (int i = 0; i < pagina_atual->num_chaves; i++) {
+            void *chave_i = (char *)pagina_atual->chaves + (i * arvore->size_chave);
+            
+            int cmp_inicio = comparar(chave_i, chave_inicio);
+            int cmp_fim = comparar(chave_i, chave_fim);
+
+            //Intervalo Aberto (Nome A, Nome B): Maior que Inicio E Menor que Fim
+            if (cmp_inicio >= 0 && cmp_fim <= 0) {
+                if (*qtd_retornos >= capacidade) {
+                    capacidade *= 2;
+                    resultados = realloc(resultados, capacidade * arvore->size_dado);
+                }
+                
+                void *dado_i = (char *)pagina_atual->dados + (i * arvore->size_dado);
+                memcpy((char *)resultados + (*qtd_retornos * arvore->size_dado), dado_i, arvore->size_dado);
+                (*qtd_retornos)++;
+                
+            } else if (cmp_fim >= 0) {
+                //Como as chaves estão em ordem alfabética, se passamos do "Nome B", podemos abortar a varredura!
+                continuar_busca = 0;
+                break;
+            }
+        }
+
+        if (continuar_busca && pagina_atual->proxima_folha != -1) {
+            offset_atual = pagina_atual->proxima_folha;
+            free(pagina_atual->chaves);
+            free(pagina_atual->dados);
+            ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+        } else {
+            continuar_busca = 0;
+        }
+    }
+
+    free(pagina_atual->chaves);
+    if (pagina_atual->eh_folha) free(pagina_atual->dados);
+    else free(pagina_atual->filhos);
+    free(pagina_atual);
+
+    if (*qtd_retornos == 0) {
+        free(resultados);
+        return NULL;
+    }
+
+    return resultados; 
+}
+
 
 void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_interno, long int *caminho_pais, int nivel_atual) {
     //Funcao responsavel por tratar casos de um underflow interno;
@@ -499,7 +659,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
             memcpy(interno->chaves, (char*)pai->chaves + ((pos_pai - 1) * arvore->size_chave), arvore->size_chave);
             
             //O último filho do irmão esquerdo passa a ser o primeiro filho
-            interno->filhos = irmao_esq->filhos[irmao_esq->num_chaves];
+            *interno->filhos = irmao_esq->filhos[irmao_esq->num_chaves];
 
             //A última chave do irmão esquerdo soba para substituir a do pai
             memcpy((char*)pai->chaves + ((pos_pai - 1) * arvore->size_chave), (char*)irmao_esq->chaves + ((irmao_esq->num_chaves - 1) * arvore->size_chave), arvore->size_chave);
@@ -530,7 +690,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
             memcpy((char*)interno->chaves + (interno->num_chaves * arvore->size_chave), (char*)pai->chaves + (pos_pai * arvore->size_chave), arvore->size_chave);
             
             //O primeiro filho do irmão direito passa a ser o último filho
-            interno->filhos[interno->num_chaves + 1] = irmao_dir->filhos;
+            interno->filhos[interno->num_chaves + 1] = *irmao_dir->filhos;
 
             //A primeira chave do irmão direito sobe para substituir a do pai
             memcpy((char*)pai->chaves + (pos_pai * arvore->size_chave), irmao_dir->chaves, arvore->size_chave);
@@ -572,7 +732,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
 
         escrever_pagina(arvore->arquivo_binario, offset_esq, irmao_esq, arvore->size_chave, arvore->size_dado);
 
-        remover_entrada_pai(arvore, pai, offset_pai, pos_pai - 1, pos_pai, caminho_pais, nivel_atual);
+        propagar_remocao_pai(arvore, pai, offset_pai, pos_pai - 1, pos_pai, caminho_pais, nivel_atual);
         liberar_offset(arvore, offset_interno);
 
         free(irmao_esq->chaves); free(irmao_esq->filhos); free(irmao_esq);
@@ -594,7 +754,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
 
         escrever_pagina(arvore->arquivo_binario, offset_interno, interno, arvore->size_chave, arvore->size_dado);
 
-        remover_entrada_pai(arvore, pai, offset_pai, pos_pai, pos_pai + 1, caminho_pais, nivel_atual);
+        propagar_remocao_pai(arvore, pai, offset_pai, pos_pai, pos_pai + 1, caminho_pais, nivel_atual);
         liberar_offset(arvore, offset_dir);
 
         free(irmao_dir->chaves); free(irmao_dir->filhos); free(irmao_dir);
@@ -624,7 +784,7 @@ void propagar_remocao_pai(ArvoreBPlus *arvore, pagina *pai, long int offset_pai,
     //Tratamento no caso da raiz, afetando a altura
     if (offset_pai == arvore->raiz_offset) {
         if (pai->num_chaves == 0) {
-            arvore->raiz_offset = pai->filhos;
+            arvore->raiz_offset = *pai->filhos;
             arvore->altura--; 
 
             //Atualiza o cabeçalho
@@ -848,7 +1008,6 @@ int remover_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void
         }
     }
 
-    // Limpeza de memória
     free(pagina_atual->chaves);
     free(pagina_atual->dados);
     free(pagina_atual);
@@ -871,17 +1030,17 @@ void ler_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, 
     memcpy(&(pagina->num_chaves), buffer + posicao_atual, sizeof(int));
     posicao_atual += sizeof(int);
 
-    pagina->chaves = malloc(pagina->num_chaves * size_chave);
+    pagina->chaves = malloc(PAGE_SIZE);
     memcpy(pagina->chaves, buffer + posicao_atual, pagina->num_chaves * size_chave);
     posicao_atual += (pagina->num_chaves * size_chave);
 
     if (pagina->eh_folha == 1) {
-        pagina->dados = malloc(pagina->num_chaves * size_dado);
+        pagina->dados = malloc(PAGE_SIZE);
         memcpy(pagina->dados, buffer + posicao_atual, pagina->num_chaves * size_dado);
         posicao_atual += (pagina->num_chaves * size_dado);
         memcpy(&(pagina->proxima_folha), buffer + posicao_atual, sizeof(long int));
     } else {
-        pagina->filhos = malloc((pagina->num_chaves + 1) * sizeof(long int));
+        pagina->filhos = malloc(PAGE_SIZE);
         memcpy(pagina->filhos, buffer + posicao_atual, (pagina->num_chaves + 1) * sizeof(long int));
     }
 }
@@ -911,4 +1070,57 @@ void escrever_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_ch
 
     fseek(arquivo, offset, SEEK_SET);
     fwrite(buffer, 4096, 1, arquivo);
+}
+
+void exibir_arvore_recursivo(ArvoreBPlus *arvore, long int offset, int nivel, void (*imprimir_chave)(void*)) {
+    //Função auxiliar recursiva da arvore
+    
+    if (offset == -1) return;
+
+    pagina *pag = malloc(sizeof(pagina));
+    ler_pagina(arvore->arquivo_binario, offset, pag, arvore->size_chave, arvore->size_dado);
+
+    //Cria a indentação visual (os "degraus" da hierarquia)
+    for (int i = 0; i < nivel; i++) {
+        printf("        "); // 8 espaços por nível
+    }
+
+    //Imprime o status da página
+    if (pag->eh_folha) {
+        printf("FOLHA: ");
+    } else {
+        printf("INTERNO: ");
+    }
+
+    //Imprime todas as chaves da pagina usando o callback cego
+    for (int i = 0; i < pag->num_chaves; i++) {
+        void *chave_i = (char *)pag->chaves + (i * arvore->size_chave);
+        imprimir_chave(chave_i);
+        if (i < pag->num_chaves - 1) printf(" | ");
+    }
+    printf("\n");
+
+    //Se for uma pagina interna, desce recursivamente para os filhos imprimindo o próximo nível
+    if (pag->eh_folha == 0) {
+        for (int i = 0; i <= pag->num_chaves; i++) {
+            exibir_arvore_recursivo(arvore, pag->filhos[i], nivel + 1, imprimir_chave);
+        }
+    }
+
+    free(pag->chaves);
+    if (pag->eh_folha) free(pag->dados);
+    else free(pag->filhos);
+    free(pag);
+}
+
+
+void exibir_arvore(ArvoreBPlus *arvore, void (*imprimir_chave)(void*)) {
+    //Função principal de chamada
+    printf("\n=== ESTRUTURA DA ARVORE B+ EM DISCO ===\n");
+    if (arvore->raiz_offset == -1) {
+        printf("A arvore esta vazia no momento.\n");
+    } else {
+        exibir_arvore_recursivo(arvore, arvore->raiz_offset, 0, imprimir_chave);
+    }
+    printf("=======================================\n");
 }
