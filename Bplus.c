@@ -61,6 +61,7 @@ FILE* inicializar_arquivo(char* nome_arquivo){
         arquivo = fopen(nome_arquivo, "wb+");
         //Se o arquivo não existe ainda, o criamos e implementamos o cabeçalho devido com a Árvore Vazia e sem espaços livres ainda
         cabecalhoArvore cabecalho;
+        memset(&cabecalho, 0, sizeof(cabecalhoArvore)); // Zera TODOS os bytes (inclusive os de padding)
         cabecalho.raiz_offset = -1;
         cabecalho.topo_lista_livre = -1;
         cabecalho.altura = 0;
@@ -118,9 +119,11 @@ void inserir_simples(ArvoreBPlus *arvore, void *chave, void *dado, pagina* pagin
     memcpy((char *)pagina_atual->dados + (posicao * arvore->size_dado), dado, arvore->size_dado);
 
     pagina_atual->num_chaves++;
+
+
 }
 
-void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia) {
+void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia, long int *offset_nova_folha) {
     //Função responsável pela cisão nas folhas da árvore
     pagina *nova_folha = malloc(sizeof(pagina));
     nova_folha->eh_folha = 1;
@@ -132,7 +135,7 @@ void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_chei
 
     nova_folha->chaves = malloc(arvore->ordem_folha * arvore->size_chave);
     nova_folha->dados = malloc(arvore->ordem_folha * arvore->size_dado);
-
+    
     void *origem_chaves = (char *)folha_cheia->chaves + (metade * arvore->size_chave);
     void *origem_dados = (char *)folha_cheia->dados + (metade * arvore->size_dado);
 
@@ -142,13 +145,15 @@ void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_chei
     //Atualiza-se a folha antiga
     folha_cheia->num_chaves = metade;
 
-    long int novo_offset = buscar_offset_livre(arvore);
+    *offset_nova_folha = buscar_offset_livre(arvore);
+
     nova_folha->proxima_folha = folha_cheia->proxima_folha;
-    folha_cheia->proxima_folha = novo_offset;
+    folha_cheia->proxima_folha = *offset_nova_folha;
 
     //Escreve-se no disco as alterações;
-    escrever_pagina(arvore->arquivo_binario, novo_offset, nova_folha, arvore->size_chave, arvore->size_dado);
+    escrever_pagina(arvore->arquivo_binario, *offset_nova_folha, nova_folha, arvore->size_chave, arvore->size_dado);
     escrever_pagina(arvore->arquivo_binario, offset_cheia, folha_cheia, arvore->size_chave, arvore->size_dado);
+    
 
     void *chave_promovida = malloc(arvore->size_chave);
     memcpy(chave_promovida, nova_folha->chaves, arvore->size_chave);
@@ -231,43 +236,53 @@ void* split_interno(ArvoreBPlus *arvore, pagina *pai_cheio, long int offset_chei
 void propagar_insercao_pai(ArvoreBPlus *arvore, void *chave_promovida, long int offset_filho_direito, long int *caminho_pais, int nivel_atual, int (*comparar)(void*, void*)) {
     //Função responsável por propagar casos excepcionais da inserção de uma nova chave, normalmente ocasionadas pela cisao
     //Caso base = Criar nova raiz
-    if (nivel_atual == 0) {
-        //Se inicia o processo de se criar uma nova págin que terá como filhos apontados as chaves
+if (nivel_atual == 0) {
+        // 1. Cria a nova raiz na RAM
         pagina *nova_raiz = malloc(sizeof(pagina));
-        nova_raiz->eh_folha = 0; 
+        nova_raiz->eh_folha = 0;
         nova_raiz->num_chaves = 1;
-        nova_raiz->proxima_folha = -1; 
+        nova_raiz->proxima_folha = -1;
+        
         nova_raiz->chaves = malloc(arvore->ordem_interna * arvore->size_chave);
         nova_raiz->filhos = malloc((arvore->ordem_interna + 1) * sizeof(long int));
-
-        //Copia da chave promovida
+        
+        // 2. Blindagem de memória para os filhos
+        for (int i = 0; i <= arvore->ordem_interna; i++) {
+            nova_raiz->filhos[i] = -1;
+        }
+        
+        // 3. Copia a chave promovida para a posição 0
         memcpy(nova_raiz->chaves, chave_promovida, arvore->size_chave);
-
-        //Conecta os ponteiros (filho esquerdo e filho direito)
-        *nova_raiz->filhos = arvore->raiz_offset;
-        nova_raiz->filhos[5] = offset_filho_direito; 
-
-        //Escreve-se no disco as alterações;
-        long int novo_offset = buscar_offset_livre(arvore); 
-        escrever_pagina(arvore->arquivo_binario, novo_offset, nova_raiz, arvore->size_chave, arvore->size_dado);
-
-        //Atualiza os dados da arvore
-        arvore->raiz_offset = novo_offset;
+        
+        // 4. A CORREÇÃO DA FOLHA SUMIDA: Liga os DOIS lados da árvore!
+        *nova_raiz->filhos = arvore->raiz_offset;       // O filho esquerdo é a antiga raiz
+        nova_raiz->filhos[1] = offset_filho_direito;      // O filho direito é a nova folha gerada no split
+        
+        // 5. A CORREÇÃO DO VALGRIND (Linha 234): Pede um espaço seguro no disco!
+        long int offset_nova_raiz = buscar_offset_livre(arvore); 
+        
+        // 6. Grava a nova raiz no disco
+        escrever_pagina(arvore->arquivo_binario, offset_nova_raiz, nova_raiz, arvore->size_chave, arvore->size_dado);
+        
+        // 7. Atualiza os metadados oficias da árvore na RAM
+        arvore->raiz_offset = offset_nova_raiz;
         arvore->altura++;
-
+        
+        // 8. OBRIGATÓRIO: Salva o novo cabeçalho no disco (Offset 0) para o programa lembrar amanhã!
         cabecalhoArvore cabecalho;
+        memset(&cabecalho, 0, sizeof(cabecalhoArvore));
         cabecalho.raiz_offset = arvore->raiz_offset;
-        cabecalho.topo_lista_livre = -1;
+        cabecalho.topo_lista_livre = -1; // Ou a variável que você usa para rastrear livres
         cabecalho.altura = arvore->altura;
-
+        
         fseek(arvore->arquivo_binario, 0, SEEK_SET);
         fwrite(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
-
+        
+        // 9. Limpeza da RAM
         free(nova_raiz->chaves);
         free(nova_raiz->filhos);
         free(nova_raiz);
-        
-        return; 
+        return;
     } else {
         long int offset_pai = caminho_pais[nivel_atual - 1]; 
         
@@ -400,28 +415,32 @@ int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int (*comparar)
     }
 
     //Inserção Simples
+    inserir_simples(arvore, chave, dado, pagina_atual, i);
     if (pagina_atual->num_chaves < arvore->ordem_folha - 1) {
-        inserir_simples(arvore, chave, dado, pagina_atual, i);
-        //Escreve-se no disco as alterações;
+        //Verifica se cabe no limite do disco e escreve no disco
         escrever_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
         free(pagina_atual->chaves);
         free(pagina_atual->dados);
         free(pagina_atual);
-        
+        free(caminho_pais);
         return 0; 
     } 
     else { //No caso de OVERFLOW realizamos a cisão
-        void *chave_promovida = split_folha(arvore, pagina_atual, offset_atual);
-        long int offset_nova_folha = pagina_atual->proxima_folha; 
+        long int offset_nova_folha = -1;
+        void *chave_promovida = split_folha(arvore, pagina_atual, offset_atual, &offset_nova_folha);
+        offset_nova_folha = pagina_atual->proxima_folha; 
         nivel_atual--; 
         
         propagar_insercao_pai(arvore, chave_promovida, offset_nova_folha, caminho_pais, nivel_atual, comparar);
+        
+        free(pagina_atual->chaves);
+        free(pagina_atual->dados);
+        free(pagina_atual);
         free(caminho_pais);
         free(chave_promovida);
         return 1; 
     }
 }
-
 
 int buscar_arvore(ArvoreBPlus *arvore, void *chave, void  *dado_retorno, int (*comparar)(void*, void*)) {
     //Função responsável pela busca de chaves na arvore
@@ -625,7 +644,6 @@ void* buscar_intervalo(ArvoreBPlus *arvore, void *chave_inicio, void *chave_fim,
 
     return resultados; 
 }
-
 
 void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_interno, long int *caminho_pais, int nivel_atual) {
     //Funcao responsavel por tratar casos de um underflow interno;
@@ -953,6 +971,7 @@ int remover_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void
         ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
         caminho_pais[nivel_atual] = offset_atual;
         nivel_atual++;
+
         
         if (pagina_atual->eh_folha == 1) break;
 
@@ -1112,7 +1131,6 @@ void exibir_arvore_recursivo(ArvoreBPlus *arvore, long int offset, int nivel, vo
     else free(pag->filhos);
     free(pag);
 }
-
 
 void exibir_arvore(ArvoreBPlus *arvore, void (*imprimir_chave)(void*)) {
     //Função principal de chamada

@@ -22,3 +22,7 @@ run: all
 #Regra 'make clean': remove arquivos objetos, executável e arquivos binários do disco
 clean:
 	rm -f *.o $(EXEC) *.bin
+
+#Comando para teste de vazamento de memória
+valgrind: sistema_rh
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(EXEC)

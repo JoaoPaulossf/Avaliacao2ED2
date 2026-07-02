@@ -39,7 +39,7 @@ ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_da
 
 void inserir_simples(ArvoreBPlus *arvore, void *chave, void *dado, pagina* pagina_atual, int posicao); //Função auxiliar de inserção simples na arvore
 
-void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia); //Função de cisão de folhas da arvore, ativada no caso de overflow
+void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia, long int *offset_nova_folha); //Função de cisão de folhas da arvore, ativada no caso de overflow
 
 void* split_interno(ArvoreBPlus *arvore, pagina *pai_cheio, long int offset_cheio, void *chave_inserir, long int offset_filho_direito, long int *offset_novo_pai, int (*comparar)(void*, void*)); //Função de cisão interna da arvore, ativada em caso de overflow de paginas internas
 
