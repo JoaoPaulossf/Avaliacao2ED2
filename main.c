@@ -11,7 +11,7 @@ int main() {
     ArvoreBPlus *arvore_rh = abrirArquivo(nomeArquivo);
     if (arvore_rh == NULL) {
         // Exemplo: Ordem 5 para nós internos e folhas. Passamos os callbacks de tamanho [3]
-        criarArquivo(nomeArquivo, 5, 5, tamanho_chave_rh(), tamanho_dado_rh());
+        criarArquivo(nomeArquivo, tamanho_chave_rh(), tamanho_dado_rh());
         arvore_rh = abrirArquivo(nomeArquivo);
     }
 

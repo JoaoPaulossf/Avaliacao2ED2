@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define PAGE_SIZE 4096
+
 
 // Definição do tipo offset para navegação no arquivo binário
 typedef long int offset;
@@ -12,7 +14,8 @@ typedef long int offset;
 typedef struct {
     offset raiz;
     offset primeiroLivre;
-    // Adicionados atributos obrigatórios para a árvore genérica funcionar
+
+    int quantidadePaginas;
     int ordemInterna;
     int ordemFolha;
     int tamanhoChave;
@@ -38,7 +41,7 @@ typedef struct {
 } ArvoreBPlus;
 
 // Inicialização e Gerenciamento do Arquivo 
-void criarArquivo(char *nomeArquivo, int ordemInterna, int ordemFolha, int tamanhoChave, int tamanhoDado);
+void criarArquivo(char *nomeArquivo, int tamanhoChave, int tamanhoDado);
 ArvoreBPlus* abrirArquivo(char *nomeArquivo);
 void fecharArvore(ArvoreBPlus *arvore);
 

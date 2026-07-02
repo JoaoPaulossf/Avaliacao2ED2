@@ -1,44 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define MAX_ORDEM 5
-#define MAX_CHAVE 100
-#define MAX_DADO 256
-
-typedef long int offset;
-
-typedef struct {
-    offset raiz;
-    offset primeiroLivre;
-
-    int quantidadePaginas;
-
-    int ordemInterna;
-    int ordemFolha;
-
-    int tamanhoDado;
-    int tamanhoChave;
-
-} cabecalho;
-
-typedef struct {
-    int ehFolha; // 1 para folha, 0 para não folha
-    int numChaves;
-    char chaves[MAX_ORDEM][MAX_CHAVE];
-    offset filhos[MAX_ORDEM + 1];
-    char dados[MAX_ORDEM][MAX_DADO];
-    offset proximaFolha; 
-}pagina;
-
-typedef struct {
-    FILE *arquivoBinario;
-    cabecalho cab;
-    int (*compara)(const void*, const void*);
-}ArvoreBPlus;
+#include "Bplus.h"
 
 //Função responsavel por criar o arquivo binário e inicializar o cabeçalho da árvore B+
-void criarArquivo(char *nomeArquivo, int ordemInterna, int ordemFolha, int tamanhoChave, int tamanhoDado){
+void criarArquivo(char *nomeArquivo, int tamanhoChave, int tamanhoDado){
     FILE *arquivo = fopen(nomeArquivo, "wb");
     if (arquivo == NULL) {
         printf("Erro ao criar o arquivo.\n");
@@ -54,8 +20,9 @@ void criarArquivo(char *nomeArquivo, int ordemInterna, int ordemFolha, int taman
     cab.tamanhoChave = tamanhoChave;
     cab.tamanhoDado = tamanhoDado;
 
-    cab.ordemInterna = ordemInterna;
-    cab.ordemFolha = ordemFolha;
+    int espaco_util = PAGE_SIZE - 16;
+    cab.ordemInterna = espaco_util / (cab.tamanhoChave + sizeof(long int));
+    cab.ordemFolha = espaco_util / (cab.tamanhoChave + cab.tamanhoDado);;
     
     fwrite(&cab, sizeof(cabecalho), 1, arquivo);
     fclose(arquivo);
