@@ -76,21 +76,16 @@ ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_da
     ArvoreBPlus *arvore = malloc(sizeof(ArvoreBPlus));
     arvore->arquivo_binario = inicializar_arquivo(nome_arquivo);
 
-    // 1. GRAVAR OS TAMANHOS (Garante que o disco saiba quantos bytes o memcpy deve copiar)
+    //Bloco para a determinar a ordem genérica da árvore
     arvore->size_chave = size_chave();
     arvore->size_dado = size_dado();
 
-    // 2. CÁLCULO MATEMÁTICO DA ORDEM (Baseado na Página de 4096 bytes)
-    // Descontamos a "casca" da struct folha: eh_folha(4) + num_chaves(4) + proxima_folha(8) = 16 bytes.
+    //Descontamos o tamanho das structs: eh_folha(4) + num_chaves(4) + proxima_folha(8) = 16 bytes.
     int espaco_util = PAGE_SIZE - 16; 
     
-    // Folhas guardam a dupla [Chave + Dado]
     arvore->ordem_folha = espaco_util / (arvore->size_chave + arvore->size_dado);
-    
-    // Internos guardam a dupla [Chave + Offset do Filho(8 bytes)]
     arvore->ordem_interna = espaco_util / (arvore->size_chave + sizeof(long int));
 
-    // 3. LER O CABEÇALHO PARA A RAM (Garante que a raiz_offset não inicie com lixo de memória)
     cabecalhoArvore cabecalho;
     fseek(arvore->arquivo_binario, 0, SEEK_SET);
     fread(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);

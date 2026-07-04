@@ -75,6 +75,7 @@ int main() {
 
                     inserir_arvore(arvore_rh, &chave_busca, &func_novo, comparar_chaves_rh);
                     printf("\nFuncionario inserido com sucesso na Arvore B+!\n");
+                    imprimir_ficha_funcionario(&func_novo);
                 }
                 break;
             }
