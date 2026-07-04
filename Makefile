@@ -1,33 +1,28 @@
-# Compilador e flags
-CC = gcc
+#Bloco de determinações para auxilio dos comandos make
+EXEC = sistema_rh #Nome do executavel final
+CC = gcc #Compilador e flags de compilação
 CFLAGS = -Wall -Wextra -g
+SRC = main.c Bplus.c AuxRH.c #Arquivos de código-fonte e objetos gerados
+DEPS = Bplus.h AuxRH.h #Arquivos de hearders
+OBJ = $(SRC:.c=.o)
 
-# Nome do executavel
-EXEC = sistema_rh
+#Bloco de comandos make
+all: $(EXEC) #Comando de compilação final
+$(EXEC): $(OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
 
-# Comando padrão de compilação
-all: $(EXEC)
+#Regra de compilação para transformar os .c em objetos .o
+%.o: %.c $(DEPS)
+	$(CC) $(CFLAGS) -c $< -o $@
 
-# Regra para gerar o executável conectando os objetos
-$(EXEC): main.o Bplus.o AuxRH.o
-	$(CC) $(CFLAGS) main.o Bplus.o AuxRH.o -o $(EXEC)
-
-# Regra para compilar o main.c
-main.o: main.c Bplus.h AuxRH.h
-	$(CC) $(CFLAGS) -c main.c
-
-# Regra para compilar a arvore B+
-Bplus.o: Bplus.c Bplus.h
-	$(CC) $(CFLAGS) -c Bplus.c
-
-# Regra para compilar as funcoes do RH
-AuxRH.o: AuxRH.c AuxRH.h
-	$(CC) $(CFLAGS) -c AuxRH.c
-
-# Comando exigido para compilar e executar o sistema automaticamente
-run: $(EXEC)
+#Comando de compilação e execução
+run: all
 	./$(EXEC)
 
-# Comando exigido para limpar objetos, executavel e o banco de dados binario
+#Regra 'make clean': remove arquivos objetos, executável e arquivos binários do disco
 clean:
 	rm -f *.o $(EXEC) *.bin
+
+#Comando para teste de vazamento de memória
+valgrind: sistema_rh
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(EXEC)

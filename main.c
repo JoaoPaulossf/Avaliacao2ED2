@@ -2,27 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include "Bplus.h"
-#include "AuxRH.h" // [1]
+#include "AuxRH.h"
 
 int main() {
-    char *nomeArquivo = "banco_rh.bin";
-    
-    // 1. Tenta abrir o arquivo. Se não existir, cria um novo passando as funções do RH
-    ArvoreBPlus *arvore_rh = abrirArquivo(nomeArquivo);
-    if (arvore_rh == NULL) {
-        // Exemplo: Ordem 5 para nós internos e folhas. Passamos os callbacks de tamanho [3]
-        criarArquivo(nomeArquivo, tamanho_chave_rh(), tamanho_dado_rh());
-        arvore_rh = abrirArquivo(nomeArquivo);
-    }
-
-    // 2. Injetamos a sua função de desempate de homônimos (ordem alfabética e cronológica) [8]
-    arvore_rh->comparar = comparar_chaves_rh; 
+    ArvoreBPlus *arvore_rh = criar_arvore("banco_rh.bin", tamanho_chave_rh, tamanho_dado_rh);
 
     int opcao = 0;
+
     while (opcao != 6) {
-        printf("\n=================================\n");
-        printf("    SISTEMA DE GESTAO DE RH\n");
-        printf("=================================\n");
+        printf("\n========================================\n");
+        printf("      SISTEMA DE GESTAO DE RH\n");
+        printf("========================================\n");
         printf("1. Inserir Funcionario\n");
         printf("2. Buscar Funcionario\n");
         printf("3. Excluir Funcionario\n");
@@ -31,193 +21,238 @@ int main() {
         printf("6. Sair\n");
         printf("Escolha uma opcao: ");
         scanf("%d", &opcao);
-        getchar(); // Limpar buffer
+        getchar(); 
 
         switch (opcao) {
-            case 1: {
-                printf("\n--- INSERIR FUNCIONARIO ---\n");
-                ChaveFuncionario chave;
-                Funcionario func;
+            case 1: { 
+                printf("\n--- INSERIR NOVO FUNCIONARIO ---\n");
+                ChaveFuncionario chave_busca;
+                Funcionario func_novo;
+                memset(&chave_busca, 0, sizeof(ChaveFuncionario)); // Zera todo o lixo da RAM
+                memset(&func_novo, 0, sizeof(Funcionario));
 
-                // Requisito 3.3.1: Solicitar inicialmente o nome e a data de nascimento [4]
-                printf("Nome do Funcionario: ");
-                ler_string(chave.nome, 100);
-                printf("Data de Nascimento (DD MM AAAA): ");
-                scanf("%d %d %d", &chave.data_nascimento.dia, &chave.data_nascimento.mes, &chave.data_nascimento.ano);
+                printf("Digite o Nome do funcionario: ");
+                ler_string(chave_busca.nome, 50);
+
+                printf("Digite a Data de Nascimento (DD MM AAAA): ");
+                scanf("%d %d %d", &chave_busca.data_nascimento.dia, &chave_busca.data_nascimento.mes, &chave_busca.data_nascimento.ano);
                 getchar();
 
-                // Busca para verificar se a combinação já existe
-                if (buscar(arvore_rh, &chave, &func)) {
-                    printf("\n[ATENCAO] Ja existe um funcionario cadastrado com este Nome e Data de Nascimento!\n");
-                    imprimir_ficha_funcionario(&func); // [9]
-                    
-                    printf("\nDeseja realizar uma atualizacao (update)? (1 - Sim / 0 - Nao): ");
-                    int opcaoUpdate;
-                    scanf("%d", &opcaoUpdate);
+                if (buscar_arvore(arvore_rh, &chave_busca, &func_novo, comparar_chaves_rh)) {
+                    printf("\n[ATENCAO] Funcionario ja existe no sistema!\n");
+                    imprimir_ficha_funcionario(&func_novo);
+                    //Caso de atualização de um cadastro existente
+                    printf("\nDeseja atualizar este cadastro? (1-Sim / 0-Nao): ");
+                    int atualiza;
+                    scanf("%d", &atualiza);
                     getchar();
-
-                    // Fluxo de atualização exigido no cenário de colisão [4]
-                    if (opcaoUpdate == 1) {
-                        printf("\n--- ATUALIZAR DADOS ---\n");
-                        printf("Novo Endereco: ");
-                        ler_string(func.endereco, 100);
-                        printf("Novo Telefone: ");
-                        ler_string(func.telefone, 11);
-                        printf("Status (1 - Ativo / 0 - Inativo): ");
-                        scanf("%d", &func.ativo);
-                        getchar();
-
-                        if (func.ativo == 0) {
-                            printf("Data de Desligamento (DD MM AAAA): ");
-                            scanf("%d %d %d", &func.data_desligamento.dia, &func.data_desligamento.mes, &func.data_desligamento.ano);
-                            getchar();
-                        }
-
-                        remover(arvore_rh, &chave); // Remove o antigo
-                        inserir(arvore_rh, &chave, &func); // Insere o novo mantendo o histórico
-                        printf("\nCadastro atualizado com sucesso!\n");
-                    } else {
-                        printf("Operacao cancelada.\n");
+                    
+                    if (atualiza) {
+                        remover_arvore(arvore_rh, &chave_busca, comparar_chaves_rh);
+                        printf("Novo Endereco: "); ler_string(func_novo.endereco, 100);
+                        printf("Novo Telefone: "); ler_string(func_novo.telefone, 20);
+                        printf("Insira o pagamento (Valor MM AAAA): ");
+                        int qtd_adaptado = func_novo.qtd_pagamentos - 12*(func_novo.qtd_pagamentos/12);
+                        scanf("%f %d %d", &func_novo.historico_pagamentos[qtd_adaptado].valor, &func_novo.historico_pagamentos[qtd_adaptado].mes_referencia, &func_novo.historico_pagamentos[qtd_adaptado].ano_referencia);
+                        func_novo.qtd_pagamentos++;
+                        inserir_arvore(arvore_rh, &chave_busca, &func_novo, comparar_chaves_rh);
+                        printf("\nFuncionario atualizado com sucesso!\n");
                     }
                 } else {
-                    // Inserção de novo registro, caso não exista [4]
-                    strcpy(func.nome, chave.nome);
-                    func.data_nascimento = chave.data_nascimento;
+                    //Preenche o novo funcionário do zero
+                    strcpy(func_novo.nome, chave_busca.nome);
+                    func_novo.data_nascimento = chave_busca.data_nascimento;
+                    
+                    printf("Nome da Mae: "); ler_string(func_novo.nome_mae, 50);
+                    printf("Nome do Pai: "); ler_string(func_novo.nome_pai, 50);
+                    printf("Endereco: "); ler_string(func_novo.endereco, 100);
+                    printf("Telefone: "); ler_string(func_novo.telefone, 20);
+                    printf("Digite a Data de Contratação (DD MM AAAA): ");
+                    scanf("%d %d %d", &func_novo.data_contratacao.dia, &func_novo.data_contratacao.mes, &func_novo.data_contratacao.ano);
+                    
+                    func_novo.ativo = 1;
+                    func_novo.qtd_pagamentos = 0; 
 
-                    printf("Nome da Mae: ");
-                    ler_string(func.nome_mae, 100);
-                    printf("Nome do Pai: ");
-                    ler_string(func.nome_pai, 100);
-                    printf("Endereco: ");
-                    ler_string(func.endereco, 100);
-                    printf("Telefone: ");
-                    ler_string(func.telefone, 11);
-                    printf("Data de Contratacao (DD MM AAAA): ");
-                    scanf("%d %d %d", &func.data_contratacao.dia, &func.data_contratacao.mes, &func.data_contratacao.ano);
-                    getchar();
-
-                    func.ativo = 1;
-                    func.qtd_pagamentos = 0; // Histórico inicializado vazio [4]
-
-                    inserir(arvore_rh, &chave, &func);
-                    printf("\nFuncionario cadastrado com sucesso!\n");
+                    inserir_arvore(arvore_rh, &chave_busca, &func_novo, comparar_chaves_rh);
+                    printf("\nFuncionario inserido com sucesso na Arvore B+!\n");
+                    imprimir_ficha_funcionario(&func_novo);
                 }
                 break;
             }
             case 2: {
                 printf("\n--- BUSCAR FUNCIONARIO ---\n");
+                
+                //Preparação de variáveis
                 ChaveFuncionario chave_busca;
-                Funcionario func_retorno;
-
-                printf("Nome do Funcionario: ");
-                ler_string(chave_busca.nome, 100);
-
-                // REQUISITO: O sistema deve tratar homônimos listando-os e pedindo a data para desempate.
-                // Como a função buscar() da API genérica requer a chave completa (Nome + Data) para a busca O(log n),
-                // solicitamos a data de nascimento para formar a chave de desempate exata.
-                printf("Data de Nascimento para desempate (DD MM AAAA): ");
-                scanf("%d %d %d", &chave_busca.data_nascimento.dia, &chave_busca.data_nascimento.mes, &chave_busca.data_nascimento.ano);
-                getchar(); // Limpar buffer do teclado
-
-                // Busca exata utilizando a API genérica do Bplus.h
-                if (buscar(arvore_rh, &chave_busca, &func_retorno)) {
-                    // Requisito: Exibe a ficha cadastral completa, incluindo o histórico de pagamentos
-                    imprimir_ficha_funcionario(&func_retorno);
-                } else {
-                    printf("\n[AVISO] Nenhum funcionario encontrado com o nome '%s' e esta data.\n", chave_busca.nome);
+                memset(&chave_busca, 0, sizeof(ChaveFuncionario));
+                
+                //Coleta inicial de chave primária
+                printf("Nome do funcionario: ");
+                ler_string(chave_busca.nome, 100); 
+                
+                int quantidade = 0;
+                //Faz a busca inicial no disco considerando apenas o nome
+                Funcionario *lista_homonimos = (Funcionario *)buscar_multiplos(arvore_rh, &chave_busca, &quantidade, comparar_nome_rh);
+                
+                if (quantidade == 0) {
+                    printf("\n[ERRO] Nenhum funcionario com o nome '%s' encontrado no indice.\n", chave_busca.nome);
+                } 
+                else if (quantidade == 1) {
+                    //Imprime direto o único resultado encontrado.
+                    imprimir_ficha_funcionario(lista_homonimos);
+                } 
+                else {
+                    //Homônimos, Lista as opções de desempate
+                    printf("\n[INFO] Encontramos %d funcionarios com o nome '%s' (Homonimos)!\n", quantidade, chave_busca.nome);
+                    for (int i = 0; i < quantidade; i++) {
+                        printf("%d) Nascido em: %02d/%02d/%04d\n", i + 1, 
+                               lista_homonimos[i].data_nascimento.dia,
+                               lista_homonimos[i].data_nascimento.mes,
+                               lista_homonimos[i].data_nascimento.ano);
+                    }
+                    
+                    //Solicita a data para montar a chave composta exata
+                    printf("\nDigite a Data de Nascimento para desempatar (DD MM AAAA): ");
+                    scanf("%d %d %d", &chave_busca.data_nascimento.dia, &chave_busca.data_nascimento.mes, &chave_busca.data_nascimento.ano);
+                    getchar(); 
+                    
+                    Funcionario func_exato;
+                    memset(&func_exato, 0, sizeof(Funcionario));
+                    
+                    //Usa o motor da Árvore B+ original para trazer o registro exato
+                    if (buscar_arvore(arvore_rh, &chave_busca, &func_exato, comparar_chaves_rh)) {
+                        imprimir_ficha_funcionario(&func_exato);
+                    } else {
+                        printf("\n[ERRO] A data informada nao corresponde a nenhum dos homonimos listados.\n");
+                    }
                 }
+                
+                if (lista_homonimos != NULL) free(lista_homonimos);
+                
                 break;
             }
-
             case 3: {
                 printf("\n--- EXCLUIR FUNCIONARIO ---\n");
-                ChaveFuncionario chave_exclusao;
-                Funcionario func_exclusao;
-
-                printf("Nome do Funcionario a ser excluido: ");
-                ler_string(chave_exclusao.nome, 100);
-
-                // REQUISITO: Tratamento de homônimos na exclusão (mesma lógica da busca)
-                printf("Data de Nascimento para desempate (DD MM AAAA): ");
-                scanf("%d %d %d", &chave_exclusao.data_nascimento.dia, &chave_exclusao.data_nascimento.mes, &chave_exclusao.data_nascimento.ano);
-                getchar();
-
-                if (buscar(arvore_rh, &chave_exclusao, &func_exclusao)) {
-                    // REQUISITO: Exibir dados omitindo o histórico de pagamentos antes de pedir confirmação
-                    printf("\n--- CONFIRMACAO DE EXCLUSAO ---\n");
-                    printf("Nome: %s\n", func_exclusao.nome);
-                    printf("Nascimento: %02d/%02d/%04d\n", func_exclusao.data_nascimento.dia, func_exclusao.data_nascimento.mes, func_exclusao.data_nascimento.ano);
-                    printf("Filiacao: %s (Mae) e %s (Pai)\n", func_exclusao.nome_mae, func_exclusao.nome_pai);
-                    printf("Status: %s\n", func_exclusao.ativo ? "Ativo" : "Inativo");
+                
+                ChaveFuncionario chave_busca;
+                memset(&chave_busca, 0, sizeof(ChaveFuncionario));
+                
+                printf("Nome do funcionario a ser excluido: ");
+                ler_string(chave_busca.nome, 100);
+                
+                int quantidade = 0;
+                Funcionario *lista_homonimos = (Funcionario *)buscar_multiplos(arvore_rh, &chave_busca, &quantidade, comparar_nome_rh);
+                
+                if (quantidade == 0) {
+                    printf("\n[ERRO] Nenhum funcionario com o nome '%s' encontrado.\n", chave_busca.nome);
+                } 
+                else {
+                    //Se achou apenas 1, já sabemos a data de nascimento dele e preenchemos automaticamente a chave.
+                    if (quantidade == 1) {
+                        chave_busca.data_nascimento = lista_homonimos->data_nascimento;
+                    } 
+                    //Se achou mais de 1, listamos e pedimos para o usuário desempatar.
+                    else {
+                        printf("\n[ATENCAO] Encontramos %d homonimos para exclusao!\n", quantidade);
+                        for (int i = 0; i < quantidade; i++) {
+                            printf("%d) Nascido em: %02d/%02d/%04d\n", i + 1, 
+                                   lista_homonimos[i].data_nascimento.dia,
+                                   lista_homonimos[i].data_nascimento.mes,
+                                   lista_homonimos[i].data_nascimento.ano);
+                        }
+                        
+                        printf("\nDigite a Data de Nascimento do funcionario que deseja EXCLUIR (DD MM AAAA): ");
+                        scanf("%d %d %d", &chave_busca.data_nascimento.dia, &chave_busca.data_nascimento.mes, &chave_busca.data_nascimento.ano);
+                        getchar();
+                    }
                     
-                    printf("\nTem certeza que deseja excluir este registro DEFINITIVAMENTE? (1 - Sim / 0 - Nao): ");
-                    int confirma;
-                    scanf("%d", &confirma);
-                    getchar();
-
-                    if (confirma == 1) {
-                        // Chama a função genérica de remoção do Bplus.h
-                        if (remover(arvore_rh, &chave_exclusao)) {
-                            printf("\n[SUCESSO] Funcionario '%s' removido com sucesso!\n", chave_exclusao.nome);
+                    //Com a chave composta completa (nome + data), validamos e excluímos
+                    Funcionario func_exato;
+                    memset(&func_exato, 0, sizeof(Funcionario));
+                    
+                    //Trazemos a ficha exata do disco para confirmar a exclusão visualmente
+                    if (buscar_arvore(arvore_rh, &chave_busca, &func_exato, comparar_chaves_rh)) {
+                        imprimir_ficha_funcionario(&func_exato);
+                        
+                        printf("\nTem CERTEZA que deseja excluir este funcionario fisica e logicamente? (1-Sim / 0-Nao): ");
+                        int confirma;
+                        scanf("%d", &confirma);
+                        getchar();
+                        
+                        if (confirma == 1) {
+                            //Chama a remoção genérica passando a chave completa e o callback principal
+                            remover_arvore(arvore_rh, &chave_busca, comparar_chaves_rh);
+                            printf("\nFuncionario excluido e Arvore B+ rebalanceada com sucesso!\n");
                         } else {
-                            printf("\n[ERRO] Falha ao remover o funcionario do disco.\n");
+                            printf("\nExclusao cancelada pelo usuario.\n");
                         }
                     } else {
-                        printf("\nOperacao de exclusao cancelada pelo usuario.\n");
+                        printf("\n[ERRO] O funcionario exato para exclusao nao foi localizado.\n");
                     }
-                } else {
-                    printf("\n[AVISO] Funcionario nao localizado para exclusao!\n");
                 }
-                break;
-            }
-            case 5: {
-                printf("\n--- ESTRUTURA DO INDICE (ARVORE B+) ---\n");
-                // REQUISITO: Imprimir de forma textual e hierárquica [1].
-                // A função imprimirArvoreGen deve ser implementada no Bplus.c, 
-                // e nós passamos o ponteiro da função de impressão do RH para ela.
                 
-                // Assumindo que a equipe criará a função: void imprimirArvoreGen(ArvoreBPlus *arvore, void (*imprimirChave)(void*))
-                imprimirArvoreGen(arvore_rh, imprimir_chave_rh);
+                if (lista_homonimos != NULL) free(lista_homonimos);
                 
-                printf("\n---------------------------------------\n");
                 break;
             }
             case 4: {
                 printf("\n--- LISTAGEM POR INTERVALO ---\n");
-                ChaveFuncionario chave_inicio, chave_fim;
-
-                // REQUISITO: O usuário deve fornecer duas strings delimitadoras (Nome A e Nome B).
-                printf("Digite o Nome de inicio do intervalo (Nome A): ");
-                ler_string(chave_inicio.nome, 100);
-
-                printf("Digite o Nome de fim do intervalo (Nome B): ");
-                ler_string(chave_fim.nome, 100);
-
-                printf("\nBuscando funcionarios no intervalo aberto entre '%s' e '%s'...\n", chave_inicio.nome, chave_fim.nome);
-
-                // Como a árvore é genérica, chamaremos uma função da API do Bplus.h.
-                // Assinatura esperada da equipe: 
-                // void listar_por_intervalo(ArvoreBPlus *arvore, void *chaveA, void *chaveB, void (*funcao_imprimir)(void*));
+                ChaveFuncionario chave_a, chave_b;
+                memset(&chave_a, 0, sizeof(ChaveFuncionario));
+                memset(&chave_b, 0, sizeof(ChaveFuncionario));
                 
-                // listar_por_intervalo(arvore_rh, &chave_inicio, &chave_fim, (void (*)(void*))imprimir_ficha_funcionario);
+                printf("Digite o Nome A (Limite Inferior): ");
+                ler_string(chave_a.nome, 100);
                 
-                printf("\n[AVISO] Funcionalidade dependente da equipe do Bplus.c (Implementar navegacao pela proximaFolha em disco).\n");
+                printf("Digite o Nome B (Limite Superior): ");
+                ler_string(chave_b.nome, 100);
+                
+                //Impede que o usuário digite a ordem invertida (Ex: Z a A)
+                if (strcmp(chave_a.nome, chave_b.nome) >= 0) {
+                    printf("\n[ERRO] O Nome A deve vir alfabeticamente antes do Nome B.\n");
+                    break;
+                }
+                
+                int quantidade = 0;
+                //A árvore desce até o "Nome A" e varre o disco pra direita usando o seu callback de nomes!
+                Funcionario *lista_intervalo = (Funcionario *)buscar_intervalo(arvore_rh, &chave_a, &chave_b, &quantidade, comparar_nome_rh);
+                
+                if (quantidade == 0) {
+                    printf("\nNenhum funcionario encontrado no intervalo [%s, %s].\n", chave_a.nome, chave_b.nome);
+                } else {
+                    printf("\n[INFO] Foram encontrados %d funcionarios no intervalo!\n", quantidade);
+                    for (int i = 0; i < quantidade; i++) {
+                        imprimir_ficha_funcionario(&lista_intervalo[i]); // Reutiliza a sua função de impressão
+                    }
+                }
+                if (lista_intervalo != NULL) free(lista_intervalo);
+                
+                break;
+            }
+            case 5: { 
+                printf("\n--- EXIBIR ESTRUTURA DO INDICE ---\n");
+                //Passamos o callback responsável por desmascarar a chave
+                exibir_arvore(arvore_rh, imprimir_chave_rh);
                 break;
             }
             case 6: {
-                printf("\n--- ENCERRANDO O SISTEMA ---\n");
-                printf("Salvando os metadados da Arvore B+ e fechando arquivos em disco...\n");
+                printf("\nEncerrando o sistema e garantindo persistencia no disco...\n");
                 
-                // REQUISITO: Garantir fechamento e integridade dos arquivos em disco
-                fecharArvore(arvore_rh);
+                //Fecha a comunicação com o arquivo binário garantindo que buffers do SO sejam salvos
+                if (arvore_rh->arquivo_binario != NULL) {
+                    fclose(arvore_rh->arquivo_binario);
+                }
                 
-                printf("Sistema encerrado de forma segura. Ate logo!\n");
+                //Libera a struct de controle principal
+                free(arvore_rh);
+                
+                printf("Sistema de RH finalizado com sucesso. Ate logo!\n");
                 break;
             }
             default:
-                printf("\n[ERRO] Opcao invalida. Tente novamente.\n");
-                break;
+                printf("\nOpcao invalida. Tente novamente.\n");
         }
     }
+
     return 0;
 }
