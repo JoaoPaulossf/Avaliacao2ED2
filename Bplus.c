@@ -73,7 +73,7 @@ FILE* inicializar_arquivo(char* nome_arquivo){
     return arquivo;
 }
 ArvoreBPlus* criar_arvore(char* nome_arquivo, int (*size_chave)(), int (*size_dado)()) {
-    ArvoreBPlus *arvore = malloc(sizeof(ArvoreBPlus));
+    ArvoreBPlus *arvore = calloc(1, sizeof(ArvoreBPlus));
     arvore->arquivo_binario = inicializar_arquivo(nome_arquivo);
 
     //Bloco para a determinar a ordem genérica da árvore
@@ -120,7 +120,7 @@ void inserir_simples(ArvoreBPlus *arvore, void *chave, void *dado, pagina* pagin
 
 void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_cheia, long int *offset_nova_folha) {
     //Função responsável pela cisão nas folhas da árvore
-    pagina *nova_folha = malloc(sizeof(pagina));
+    pagina *nova_folha = calloc(1, sizeof(pagina));
     nova_folha->eh_folha = 1;
     
     //Passasse metade das chaves para a nova folha criada
@@ -128,8 +128,8 @@ void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_chei
     int qtd_movida = folha_cheia->num_chaves - metade;
     nova_folha->num_chaves = qtd_movida;
 
-    nova_folha->chaves = malloc(arvore->ordem_folha * arvore->size_chave);
-    nova_folha->dados = malloc(arvore->ordem_folha * arvore->size_dado);
+    nova_folha->chaves = calloc(1, arvore->ordem_folha * arvore->size_chave);
+    nova_folha->dados = calloc(1, arvore->ordem_folha * arvore->size_dado);
     
     void *origem_chaves = (char *)folha_cheia->chaves + (metade * arvore->size_chave);
     void *origem_dados = (char *)folha_cheia->dados + (metade * arvore->size_dado);
@@ -150,7 +150,7 @@ void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_chei
     escrever_pagina(arvore->arquivo_binario, offset_cheia, folha_cheia, arvore->size_chave, arvore->size_dado);
     
 
-    void *chave_promovida = malloc(arvore->size_chave);
+    void *chave_promovida = calloc(1, arvore->size_chave);
     memcpy(chave_promovida, nova_folha->chaves, arvore->size_chave);
 
     free(nova_folha->chaves);
@@ -163,8 +163,8 @@ void* split_folha(ArvoreBPlus *arvore, pagina *folha_cheia, long int offset_chei
 void* split_interno(ArvoreBPlus *arvore, pagina *pai_cheio, long int offset_cheio, void *chave_inserir, long int offset_filho_direito, long int *offset_novo_pai, int (*comparar)(void*, void*)) {
     //Função responsável pela cisao interna da arvore ocasionados durante a propagação após a insercao de uma nova chave
     //Arrays temporários apenas para a manipulação interna
-    void *temp_chaves = malloc(arvore->ordem_interna * arvore->size_chave);
-    long int *temp_filhos = malloc((arvore->ordem_interna + 1) * sizeof(long int));
+    void *temp_chaves = calloc(1, arvore->ordem_interna * arvore->size_chave);
+    long int *temp_filhos = calloc(1, (arvore->ordem_interna + 1) * sizeof(long int));
 
     //Copia os dados atuais para os temporários
     memcpy(temp_chaves, pai_cheio->chaves, pai_cheio->num_chaves * arvore->size_chave);
@@ -196,18 +196,18 @@ void* split_interno(ArvoreBPlus *arvore, pagina *pai_cheio, long int offset_chei
     int metade = total_chaves_temp / 2;
 
     //A chave do meio sobe e abandona esse nível!
-    void *nova_chave_promovida = malloc(arvore->size_chave);
+    void *nova_chave_promovida = calloc(1, arvore->size_chave);
     memcpy(nova_chave_promovida, (char *)temp_chaves + (metade * arvore->size_chave), arvore->size_chave);
 
     //Configura a nova página interna
-    pagina *novo_pai = malloc(sizeof(pagina));
+    pagina *novo_pai = calloc(1, sizeof(pagina));
     novo_pai->eh_folha = 0;
     novo_pai->proxima_folha = -1;
     
     novo_pai->num_chaves = total_chaves_temp - metade - 1; 
     
-    novo_pai->chaves = malloc(arvore->ordem_interna * arvore->size_chave);
-    novo_pai->filhos = malloc((arvore->ordem_interna + 1) * sizeof(long int));
+    novo_pai->chaves = calloc(1, arvore->ordem_interna * arvore->size_chave);
+    novo_pai->filhos = calloc(1, (arvore->ordem_interna + 1) * sizeof(long int));
 
     memcpy(novo_pai->chaves, (char *)temp_chaves + ((metade + 1) * arvore->size_chave), novo_pai->num_chaves * arvore->size_chave);
     memcpy(novo_pai->filhos, temp_filhos + (metade + 1), (novo_pai->num_chaves + 1) * sizeof(long int));
@@ -233,13 +233,13 @@ void propagar_insercao_pai(ArvoreBPlus *arvore, void *chave_promovida, long int 
     //Caso base = Criar nova raiz
 if (nivel_atual == 0) {
         // 1. Cria a nova raiz na RAM
-        pagina *nova_raiz = malloc(sizeof(pagina));
+        pagina *nova_raiz = calloc(1, sizeof(pagina));
         nova_raiz->eh_folha = 0;
         nova_raiz->num_chaves = 1;
         nova_raiz->proxima_folha = -1;
         
-        nova_raiz->chaves = malloc(arvore->ordem_interna * arvore->size_chave);
-        nova_raiz->filhos = malloc((arvore->ordem_interna + 1) * sizeof(long int));
+        nova_raiz->chaves = calloc(1, arvore->ordem_interna * arvore->size_chave);
+        nova_raiz->filhos = calloc(1, (arvore->ordem_interna + 1) * sizeof(long int));
         
         // 2. Blindagem de memória para os filhos
         for (int i = 0; i <= arvore->ordem_interna; i++) {
@@ -281,7 +281,7 @@ if (nivel_atual == 0) {
     } else {
         long int offset_pai = caminho_pais[nivel_atual - 1]; 
         
-        pagina *pai = malloc(sizeof(pagina));
+        pagina *pai = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_pai, pai, arvore->size_chave, arvore->size_dado);
 
         //Busca a posição 'i' correta para inserir a chave promovida no pai
@@ -338,17 +338,17 @@ if (nivel_atual == 0) {
 
 int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int (*comparar)(void*, void*)) {
     //Função responsável por inserir novas chaves na arvore e tratar possíveis casos de overflow 
-    long int *caminho_pais = malloc((arvore->altura + 1) * sizeof(long int)); //Será usado na propagação
+    long int *caminho_pais = calloc(1, (arvore->altura + 1) * sizeof(long int)); //Será usado na propagação
     int nivel_atual = 0;
     long int offset_atual = arvore->raiz_offset;
     if (arvore->raiz_offset == -1) {
-        pagina *nova_raiz = malloc(sizeof(pagina));
+        pagina *nova_raiz = calloc(1, sizeof(pagina));
         nova_raiz->eh_folha = 1;
         nova_raiz->num_chaves = 1;
         nova_raiz->proxima_folha = -1;
 
-        nova_raiz->chaves = malloc(arvore->ordem_folha * arvore->size_chave);
-        nova_raiz->dados = malloc(arvore->ordem_folha * arvore->size_dado);
+        nova_raiz->chaves = calloc(1, arvore->ordem_folha * arvore->size_chave);
+        nova_raiz->dados = calloc(1, arvore->ordem_folha * arvore->size_dado);
 
         // Copia a primeira chave e o primeiro dado para a nova raiz
         memcpy(nova_raiz->chaves, chave, arvore->size_chave);
@@ -378,7 +378,7 @@ int inserir_arvore(ArvoreBPlus *arvore, void *chave, void *dado, int (*comparar)
         return 1; // Inserido com sucesso na nova raiz
     }
 
-    pagina *pagina_atual = malloc(sizeof(pagina));
+    pagina *pagina_atual = calloc(1, sizeof(pagina));
 
     while(1) {
         ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
@@ -442,7 +442,7 @@ int buscar_arvore(ArvoreBPlus *arvore, void *chave, void  *dado_retorno, int (*c
     if (arvore->raiz_offset == -1) return 0; // Árvore vazia
 
     long int offset_atual = arvore->raiz_offset;
-    pagina *pagina_atual = malloc(sizeof(pagina));
+    pagina *pagina_atual = calloc(1, sizeof(pagina));
     ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
 
     //Laço de descida
@@ -491,7 +491,7 @@ void* buscar_multiplos(ArvoreBPlus *arvore, void *chave_parcial, int *qtd_retorn
     if (arvore->raiz_offset == -1) return NULL;
 
     long int offset_atual = arvore->raiz_offset;
-    pagina *pagina_atual = malloc(sizeof(pagina));
+    pagina *pagina_atual = calloc(1, sizeof(pagina));
     ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
 
     while (pagina_atual->eh_folha == 0) {
@@ -510,7 +510,7 @@ void* buscar_multiplos(ArvoreBPlus *arvore, void *chave_parcial, int *qtd_retorn
     }
 
     int capacidade = 5;
-    void *resultados = malloc(capacidade * arvore->size_dado);
+    void *resultados = calloc(1, capacidade * arvore->size_dado);
     int continuar_busca = 1;
 
     while (continuar_busca) {
@@ -569,7 +569,7 @@ void* buscar_intervalo(ArvoreBPlus *arvore, void *chave_inicio, void *chave_fim,
     if (arvore->raiz_offset == -1) return NULL; //Árvore vazia
 
     long int offset_atual = arvore->raiz_offset;
-    pagina *pagina_atual = malloc(sizeof(pagina));
+    pagina *pagina_atual = calloc(1, sizeof(pagina));
     ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
 
     //Desce até as folhas
@@ -589,7 +589,7 @@ void* buscar_intervalo(ArvoreBPlus *arvore, void *chave_inicio, void *chave_fim,
 
     //Varredura pelas folhas
     int capacidade = 5;
-    void *resultados = malloc(capacidade * arvore->size_dado);
+    void *resultados = calloc(1, capacidade * arvore->size_dado);
     int continuar_busca = 1;
 
     while (continuar_busca) {
@@ -646,7 +646,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
 
     //Carrega-se o pai para descobrir os irmãos
     long int offset_pai = caminho_pais[nivel_atual - 1];
-    pagina *pai = malloc(sizeof(pagina));
+    pagina *pai = calloc(1, sizeof(pagina));
     ler_pagina(arvore->arquivo_binario, offset_pai, pai, arvore->size_chave, arvore->size_dado);
 
     //Descobre a posição do nosso nó interno
@@ -660,7 +660,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
     //Primeiramente tentamos a redistribuição a esquerda
     if (pos_pai > 0) {
         long int offset_esq = pai->filhos[pos_pai - 1];
-        pagina *irmao_esq = malloc(sizeof(pagina));
+        pagina *irmao_esq = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_esq, irmao_esq, arvore->size_chave, arvore->size_dado);
 
         if (irmao_esq != NULL && irmao_esq->num_chaves > minimo_chaves) {
@@ -695,7 +695,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
     //Tentamos enfima  redistribuição a direita
     if (pos_pai < pai->num_chaves) {
         long int offset_dir = pai->filhos[pos_pai + 1];
-        pagina *irmao_dir = malloc(sizeof(pagina));
+        pagina *irmao_dir = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_dir, irmao_dir, arvore->size_chave, arvore->size_dado);
 
         if (irmao_dir->num_chaves > minimo_chaves) {
@@ -731,7 +731,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
     if (pos_pai > 0) {
         //Irmão esquerdo absorve a pagina
         long int offset_esq = pai->filhos[pos_pai - 1];
-        pagina *irmao_esq = malloc(sizeof(pagina));
+        pagina *irmao_esq = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_esq, irmao_esq, arvore->size_chave, arvore->size_dado);
 
         //Reorganiza inserindo a chave do pai
@@ -753,7 +753,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
     } else {
         //Pagina absorve o irmao direito
         long int offset_dir = pai->filhos[pos_pai + 1];
-        pagina *irmao_dir = malloc(sizeof(pagina));
+        pagina *irmao_dir = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_dir, irmao_dir, arvore->size_chave, arvore->size_dado);
 
         //Reorganizamos a pagina com a chave do pai
@@ -902,20 +902,6 @@ void underflow_folha(ArvoreBPlus *arvore, pagina *folha, long int offset_folha, 
             }
             return;
         }
-        if (irmao_esq != NULL) {
-            free(irmao_esq->chaves);
-            if (irmao_esq->eh_folha == 1) {
-                free(irmao_esq->dados);
-            } else {
-                free(irmao_esq->filhos);
-            }
-                free(irmao_esq);
-        }
-        if (pai != NULL) {
-            free(pai->chaves);
-            free(pai->filhos);
-            free(pai);
-        }
     }
 
     //Então tentamos uma redistribuição pela esquerda
@@ -1027,10 +1013,10 @@ int remover_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void
     if (offset_atual == -1) return 0; //Árvore vazia, nada a remover
 
     //Alocamos um vetor para marcar o caminho até a chave no caso de underflow
-    long int *caminho_pais = malloc((arvore->altura + 1) * sizeof(long int));
+    long int *caminho_pais = calloc(1, (arvore->altura + 1) * sizeof(long int));
     int nivel_atual = 0;
     
-    pagina *pagina_atual = malloc(sizeof(pagina));
+    pagina *pagina_atual = calloc(1, sizeof(pagina));
     
     //Descida Rastreada até a folha
     while(1) {
@@ -1115,17 +1101,17 @@ void ler_pagina(FILE *arquivo, long int offset, pagina *pagina, int size_chave, 
     memcpy(&(pagina->num_chaves), buffer + posicao_atual, sizeof(int));
     posicao_atual += sizeof(int);
 
-    pagina->chaves = malloc(PAGE_SIZE);
+    pagina->chaves = calloc(1, PAGE_SIZE);
     memcpy(pagina->chaves, buffer + posicao_atual, pagina->num_chaves * size_chave);
     posicao_atual += (pagina->num_chaves * size_chave);
 
     if (pagina->eh_folha == 1) {
-        pagina->dados = malloc(PAGE_SIZE);
+        pagina->dados = calloc(1, PAGE_SIZE);
         memcpy(pagina->dados, buffer + posicao_atual, pagina->num_chaves * size_dado);
         posicao_atual += (pagina->num_chaves * size_dado);
         memcpy(&(pagina->proxima_folha), buffer + posicao_atual, sizeof(long int));
     } else {
-        pagina->filhos = malloc(PAGE_SIZE);
+        pagina->filhos = calloc(1, PAGE_SIZE);
         memcpy(pagina->filhos, buffer + posicao_atual, (pagina->num_chaves + 1) * sizeof(long int));
     }
 }
@@ -1162,7 +1148,7 @@ void exibir_arvore_recursivo(ArvoreBPlus *arvore, long int offset, int nivel, vo
     
     if (offset == -1) return;
 
-    pagina *pag = malloc(sizeof(pagina));
+    pagina *pag = calloc(1, sizeof(pagina));
     ler_pagina(arvore->arquivo_binario, offset, pag, arvore->size_chave, arvore->size_dado);
 
     //Cria a indentação visual (os "degraus" da hierarquia)
