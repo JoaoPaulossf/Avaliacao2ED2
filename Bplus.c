@@ -663,7 +663,7 @@ void underflow_interno(ArvoreBPlus *arvore, pagina *interno, long int offset_int
         pagina *irmao_esq = malloc(sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_esq, irmao_esq, arvore->size_chave, arvore->size_dado);
 
-        if (irmao_esq->num_chaves > minimo_chaves) {
+        if (irmao_esq != NULL && irmao_esq->num_chaves > minimo_chaves) {
             //Reorganiza a pagina interna
             memmove((char*)interno->chaves + arvore->size_chave, interno->chaves, interno->num_chaves * arvore->size_chave);
             memmove(interno->filhos + 1, interno->filhos, (interno->num_chaves + 1) * sizeof(long int));
@@ -849,7 +849,7 @@ void concatenar_folhas(ArvoreBPlus *arvore, pagina *folha_esq, long int offset_e
 void underflow_folha(ArvoreBPlus *arvore, pagina *folha, long int offset_folha, long int *caminho_pais, int nivel_atual) {
     //Funcao responsael por tratar o caso de underflow durante a remocao
     long int offset_pai = caminho_pais[nivel_atual - 1];
-    pagina *pai = malloc(sizeof(pagina));
+    pagina *pai = calloc(1, sizeof(pagina));
     ler_pagina(arvore->arquivo_binario, offset_pai, pai, arvore->size_chave, arvore->size_dado);
 
     //Encontra a posição da nossa folha no vetor de filhos do pai
@@ -863,7 +863,7 @@ void underflow_folha(ArvoreBPlus *arvore, pagina *folha, long int offset_folha, 
     //Primeiro tentamos realizar uma redistribuição, pela esquerda
     if (pos_pai > 0) {
         long int offset_esq = pai->filhos[pos_pai - 1];
-        pagina *irmao_esq = malloc(sizeof(pagina));
+        pagina *irmao_esq = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_esq, irmao_esq, arvore->size_chave, arvore->size_dado);
 
         if (irmao_esq->num_chaves > minimo_chaves) {
@@ -886,20 +886,45 @@ void underflow_folha(ArvoreBPlus *arvore, pagina *folha, long int offset_folha, 
             escrever_pagina(arvore->arquivo_binario, offset_folha, folha, arvore->size_chave, arvore->size_dado);
             escrever_pagina(arvore->arquivo_binario, offset_pai, pai, arvore->size_chave, arvore->size_dado);
 
-            free(irmao_esq->chaves); free(irmao_esq->dados); free(irmao_esq);
-            free(pai->chaves); free(pai->filhos); free(pai);
+            if (irmao_esq != NULL) {
+                free(irmao_esq->chaves);
+                if (irmao_esq->eh_folha == 1) {
+                    free(irmao_esq->dados);
+                } else {
+                    free(irmao_esq->filhos);
+                }
+                    free(irmao_esq);
+            }
+            if (pai != NULL) {
+                free(pai->chaves);
+                free(pai->filhos);
+                free(pai);
+            }
             return;
         }
-        free(irmao_esq->chaves); free(irmao_esq->dados); free(irmao_esq);
+        if (irmao_esq != NULL) {
+            free(irmao_esq->chaves);
+            if (irmao_esq->eh_folha == 1) {
+                free(irmao_esq->dados);
+            } else {
+                free(irmao_esq->filhos);
+            }
+                free(irmao_esq);
+        }
+        if (pai != NULL) {
+            free(pai->chaves);
+            free(pai->filhos);
+            free(pai);
+        }
     }
 
     //Então tentamos uma redistribuição pela esquerda
     if (pos_pai < pai->num_chaves) {
         long int offset_dir = pai->filhos[pos_pai + 1];
-        pagina *irmao_dir = malloc(sizeof(pagina));
+        pagina *irmao_dir = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_dir, irmao_dir, arvore->size_chave, arvore->size_dado);
 
-        if (irmao_dir->num_chaves > minimo_chaves) {
+        if (irmao_dir != NULL && irmao_dir->num_chaves > minimo_chaves) {
             //Copia a primeira chave e dado do irmão direito para o final da nossa folha
             memcpy((char*)folha->chaves + (folha->num_chaves * arvore->size_chave), irmao_dir->chaves, arvore->size_chave);
             memcpy((char*)folha->dados + (folha->num_chaves * arvore->size_dado), irmao_dir->dados, arvore->size_dado);
@@ -918,36 +943,82 @@ void underflow_folha(ArvoreBPlus *arvore, pagina *folha, long int offset_folha, 
             escrever_pagina(arvore->arquivo_binario, offset_folha, folha, arvore->size_chave, arvore->size_dado);
             escrever_pagina(arvore->arquivo_binario, offset_pai, pai, arvore->size_chave, arvore->size_dado);
 
-            free(irmao_dir->chaves); free(irmao_dir->dados); free(irmao_dir);
-            free(pai->chaves); free(pai->filhos); free(pai);
+            if (irmao_dir != NULL) {
+                free(irmao_dir->chaves);
+                if (irmao_dir->eh_folha == 1) {
+                    free(irmao_dir->dados);
+                } else {
+                    free(irmao_dir->filhos);
+                }
+                free(irmao_dir);
+            }
+            if (pai != NULL) {
+                free(pai->chaves);
+                free(pai->filhos);
+                free(pai);
+            }
             return;
         }
-        free(irmao_dir->chaves); free(irmao_dir->dados); free(irmao_dir);
+        if (irmao_dir != NULL) {
+            free(irmao_dir->chaves);
+            if (irmao_dir->eh_folha == 1) {
+                free(irmao_dir->dados);
+            } else {
+                free(irmao_dir->filhos);
+            }
+            free(irmao_dir);
+        }
+        if (pai != NULL) {
+            free(pai->chaves);
+            free(pai->filhos);
+            free(pai);
+        }
+        return;
     }
 
     //Neste ponto a redistribuição não foi possível então precisaemos concatenar paginas
     if (pos_pai > 0) {
         //Irmão da esquerda absorve a nossa folha
         long int offset_esq = pai->filhos[pos_pai - 1];
-        pagina *irmao_esq = malloc(sizeof(pagina));
+        pagina *irmao_esq = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_esq, irmao_esq, arvore->size_chave, arvore->size_dado);
 
         concatenar_folhas(arvore, irmao_esq, offset_esq, folha, offset_folha, pai, offset_pai, pos_pai - 1, pos_pai, caminho_pais, nivel_atual);
 
-        free(irmao_esq->chaves); free(irmao_esq->dados); free(irmao_esq);
+        if (irmao_esq != NULL) {
+            free(irmao_esq->chaves);
+            if (irmao_esq->eh_folha == 1) {
+                free(irmao_esq->dados);
+            } else {
+                free(irmao_esq->filhos);
+            }
+                free(irmao_esq);
+        }
         
     } else {
         //A folha absorve o irmão da direita
         long int offset_dir = pai->filhos[pos_pai + 1];
-        pagina *irmao_dir = malloc(sizeof(pagina));
+        pagina *irmao_dir = calloc(1, sizeof(pagina));
         ler_pagina(arvore->arquivo_binario, offset_dir, irmao_dir, arvore->size_chave, arvore->size_dado);
 
         concatenar_folhas(arvore, folha, offset_folha, irmao_dir, offset_dir, pai, offset_pai, pos_pai, pos_pai + 1, caminho_pais, nivel_atual);
 
-        free(irmao_dir->chaves); free(irmao_dir->dados); free(irmao_dir);
+        if (irmao_dir != NULL) {
+            free(irmao_dir->chaves);
+            if (irmao_dir->eh_folha == 1) {
+                free(irmao_dir->dados);
+            } else {
+                free(irmao_dir->filhos);
+            }
+            free(irmao_dir);
+        }
     }
     
-    free(pai->chaves); free(pai->filhos); free(pai);
+    if (pai != NULL) {
+        free(pai->chaves);
+        free(pai->filhos);
+        free(pai);
+    }
 }
 
 int remover_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void*)) {
