@@ -1035,11 +1035,13 @@ int remover_arvore(ArvoreBPlus *arvore, void *chave, int (*comparar)(void*, void
     //Descida Rastreada até a folha
     while(1) {
         ler_pagina(arvore->arquivo_binario, offset_atual, pagina_atual, arvore->size_chave, arvore->size_dado);
+        
+        // 1. CHECA PRIMEIRO! Se for folha, quebra o laço ANTES de sujar o caminho_pais!
+        if (pagina_atual->eh_folha == 1) break;
+
+        // 2. Se o código passou do break, temos 100% de certeza que é um nó interno! Salva o pai.
         caminho_pais[nivel_atual] = offset_atual;
         nivel_atual++;
-
-        
-        if (pagina_atual->eh_folha == 1) break;
 
         int i = 0;
         while (i < pagina_atual->num_chaves) {
