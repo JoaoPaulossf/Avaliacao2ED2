@@ -232,7 +232,6 @@ void propagar_insercao_pai(ArvoreBPlus *arvore, void *chave_promovida, long int 
     //Função responsável por propagar casos excepcionais da inserção de uma nova chave, normalmente ocasionadas pela cisao
     //Caso base = Criar nova raiz
 if (nivel_atual == 0) {
-        // 1. Cria a nova raiz na RAM
         pagina *nova_raiz = calloc(1, sizeof(pagina));
         nova_raiz->eh_folha = 0;
         nova_raiz->num_chaves = 1;
@@ -241,29 +240,23 @@ if (nivel_atual == 0) {
         nova_raiz->chaves = calloc(1, arvore->ordem_interna * arvore->size_chave);
         nova_raiz->filhos = calloc(1, (arvore->ordem_interna + 1) * sizeof(long int));
         
-        // 2. Blindagem de memória para os filhos
         for (int i = 0; i <= arvore->ordem_interna; i++) {
             nova_raiz->filhos[i] = -1;
         }
         
-        // 3. Copia a chave promovida para a posição 0
         memcpy(nova_raiz->chaves, chave_promovida, arvore->size_chave);
         
-        // 4. A CORREÇÃO DA FOLHA SUMIDA: Liga os DOIS lados da árvore!
         *nova_raiz->filhos = arvore->raiz_offset;       // O filho esquerdo é a antiga raiz
         nova_raiz->filhos[1] = offset_filho_direito;      // O filho direito é a nova folha gerada no split
         
-        // 5. A CORREÇÃO DO VALGRIND (Linha 234): Pede um espaço seguro no disco!
         long int offset_nova_raiz = buscar_offset_livre(arvore); 
         
-        // 6. Grava a nova raiz no disco
         escrever_pagina(arvore->arquivo_binario, offset_nova_raiz, nova_raiz, arvore->size_chave, arvore->size_dado);
         
-        // 7. Atualiza os metadados oficias da árvore na RAM
         arvore->raiz_offset = offset_nova_raiz;
         arvore->altura++;
         
-        // 8. OBRIGATÓRIO: Salva o novo cabeçalho no disco (Offset 0) para o programa lembrar amanhã!
+        //Salva o novo cabeçalho no disco (Offset 0) para o programa lembrar amanhã!
         cabecalhoArvore cabecalho;
         memset(&cabecalho, 0, sizeof(cabecalhoArvore));
         cabecalho.raiz_offset = arvore->raiz_offset;
@@ -273,7 +266,6 @@ if (nivel_atual == 0) {
         fseek(arvore->arquivo_binario, 0, SEEK_SET);
         fwrite(&cabecalho, sizeof(cabecalhoArvore), 1, arvore->arquivo_binario);
         
-        // 9. Limpeza da RAM
         free(nova_raiz->chaves);
         free(nova_raiz->filhos);
         free(nova_raiz);
